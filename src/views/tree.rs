@@ -364,7 +364,7 @@ impl TreeView {
                     CONNECTOR_BLANK
                 };
                 spans.push(Span::styled(
-                    connector.to_string(),
+                    connector,
                     theme.tree_guide_style,
                 ));
             }
@@ -389,7 +389,7 @@ impl TreeView {
                 ICON_COLLAPSED
             };
             spans.push(Span::styled(
-                icon.to_string(),
+                icon,
                 theme.fg_style,
             ));
         }
@@ -397,10 +397,7 @@ impl TreeView {
         // Key (if in an object)
         if let Some(ref key) = row.key {
             spans.push(Span::styled(format!("\"{}\"", key), theme.key));
-            spans.push(Span::styled(
-                ": ".to_string(),
-                theme.fg_dim_style,
-            ));
+            spans.push(Span::styled(": ", theme.fg_dim_style));
         }
 
         // Array index (if in an array)
@@ -415,7 +412,7 @@ impl TreeView {
         let node = self.document.node(row.node_id);
         match &node.value {
             JsonValue::Null => {
-                spans.push(Span::styled("null".to_string(), theme.null));
+                spans.push(Span::styled("null", theme.null));
             }
             JsonValue::Bool(b) => {
                 spans.push(Span::styled(b.to_string(), theme.boolean));
@@ -433,28 +430,28 @@ impl TreeView {
             }
             JsonValue::Array(_) => {
                 let is_stub = self.stub_ids.contains(&row.node_id);
-                spans.push(Span::styled("[".to_string(), theme.bracket));
+                spans.push(Span::styled("[", theme.bracket));
                 if !row.is_expanded {
                     let label = if is_stub {
-                        "\u{2026}".to_string() // "…"
+                        "\u{2026}".into() // "…"
                     } else {
                         format!("{} items", node.value.child_count())
                     };
                     spans.push(Span::styled(label, theme.fg_dim_style));
-                    spans.push(Span::styled("]".to_string(), theme.bracket));
+                    spans.push(Span::styled("]", theme.bracket));
                 }
             }
             JsonValue::Object(_) => {
                 let is_stub = self.stub_ids.contains(&row.node_id);
-                spans.push(Span::styled("{".to_string(), theme.bracket));
+                spans.push(Span::styled("{", theme.bracket));
                 if !row.is_expanded {
                     let label = if is_stub {
-                        "\u{2026}".to_string() // "…"
+                        "\u{2026}".into() // "…"
                     } else {
                         format!("{} keys", node.value.child_count())
                     };
                     spans.push(Span::styled(label, theme.fg_dim_style));
-                    spans.push(Span::styled("}".to_string(), theme.bracket));
+                    spans.push(Span::styled("}", theme.bracket));
                 }
             }
         }
