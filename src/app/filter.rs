@@ -116,6 +116,11 @@ pub(crate) fn run_filter(
         }
     };
 
+    if results.is_empty() {
+        filter.error = Some("No matching results".to_string());
+        return;
+    }
+
     // Wrap multiple results in an array; a single result stands on its own.
     let result_value = if results.len() == 1 {
         results.into_iter().next().unwrap()

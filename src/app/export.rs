@@ -57,10 +57,14 @@ pub(crate) fn default_export_filename(doc: &JsonDocument) -> String {
 
 pub(crate) fn perform_export(filename: &str, content: &str) -> Result<String, String> {
     use std::io::Write;
+    let filename = filename.trim();
+    if filename.is_empty() {
+        return Err("Export failed: no filename".to_string());
+    }
     match std::fs::File::create(filename) {
         Ok(mut f) => {
             f.write_all(content.as_bytes())
-                .map_err(|_| "Export failed: write error".to_string())?;
+                .map_err(|e| format!("Export failed: {}", e))?;
             Ok(format!("Exported to {}", filename))
         }
         Err(e) => Err(format!("Export failed: {}", e)),

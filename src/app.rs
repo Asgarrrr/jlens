@@ -440,8 +440,10 @@ fn run_app(
                                 app.last_viewport_height,
                             );
                         }
-                        FilterAction::None => {}
-                        _ => {}
+                        FilterAction::None
+                        | FilterAction::CloseResult
+                        | FilterAction::ReopenInput
+                        | FilterAction::DelegateToResult(_) => {}
                     }
                 } else if app.filter.showing_result {
                     match app.filter.handle_result_key(key) {
@@ -453,8 +455,9 @@ fn run_app(
                                 handle_action(&mut app, action);
                             }
                         }
-                        FilterAction::None => {}
-                        _ => {}
+                        FilterAction::None
+                        | FilterAction::CloseInput
+                        | FilterAction::RunFilter => {}
                     }
                 } else if app.export.active {
                     match app.export.handle_key(key) {
