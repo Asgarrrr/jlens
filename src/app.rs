@@ -1,15 +1,13 @@
+mod terminal;
+
 use std::collections::HashSet;
-use std::io::{self, stdout};
+use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use crossterm::ExecutableCommand;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -353,7 +351,11 @@ impl App {
 
     fn navigate_to_current_hit(&mut self) {
         if let Some(hit) = self.search.hits.get(self.search.current_hit) {
-            self.tree_view.navigate_to_node(hit.node_id);
+            let node_id = hit.node_id;
+            self.tree_view.set_current_search_node(Some(node_id));
+            self.tree_view.navigate_to_node(node_id);
+        } else {
+            self.tree_view.set_current_search_node(None);
         }
     }
 }
@@ -384,26 +386,7 @@ pub fn run_diff(path_a: &Path, path_b: &Path, theme: Theme) -> Result<()> {
         .unwrap_or_else(|| path_b.display().to_string());
     let title = format!("Diff: {} \u{2194} {}", name_a, name_b);
 
-    enable_raw_mode()?;
-    stdout()
-        .execute(EnterAlternateScreen)?
-        .execute(crossterm::event::EnableMouseCapture)?;
-
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let backend = CrosstermBackend::new(stdout());
-        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
-        terminal.clear().expect("failed to clear terminal");
-        run_diff_app(&mut terminal, diff_view, &title, theme)
-    }));
-
-    let _ = stdout().execute(crossterm::event::DisableMouseCapture);
-    let _ = disable_raw_mode();
-    let _ = stdout().execute(LeaveAlternateScreen);
-
-    match outcome {
-        Ok(inner) => inner,
-        Err(payload) => std::panic::resume_unwind(payload),
-    }
+    terminal::with_terminal(|t| run_diff_app(t, diff_view, &title, theme))
 }
 
 fn run_diff_app(
@@ -632,28 +615,7 @@ fn run_with_document(
     lazy: Option<LazyDocument>,
     theme: Theme,
 ) -> Result<()> {
-    enable_raw_mode()?;
-    stdout()
-        .execute(EnterAlternateScreen)?
-        .execute(crossterm::event::EnableMouseCapture)?;
-
-    // Ensure terminal is restored even on panic
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let backend = CrosstermBackend::new(stdout());
-        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
-        terminal.clear().expect("failed to clear terminal");
-        run_app(&mut terminal, document, lazy, theme)
-    }));
-
-    // Always restore terminal, regardless of panic or error
-    let _ = stdout().execute(crossterm::event::DisableMouseCapture);
-    let _ = disable_raw_mode();
-    let _ = stdout().execute(LeaveAlternateScreen);
-
-    match result {
-        Ok(inner) => inner,
-        Err(payload) => std::panic::resume_unwind(payload),
-    }
+    terminal::with_terminal(|t| run_app(t, document, lazy, theme))
 }
 
 fn run_app(
