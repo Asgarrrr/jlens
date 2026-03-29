@@ -12,10 +12,10 @@ use ratatui::backend::CrosstermBackend;
 
 use crate::diff::algo;
 use crate::diff::view::DiffView;
-use crate::event::{AppEvent, EventReader};
+use crate::event::AppEvent;
 use crate::parser;
 use crate::theme::Theme;
-use crate::ui::{self, UiLayout};
+use crate::ui;
 use crate::views::raw;
 use crate::views::{View, ViewAction, StatusInfo};
 
@@ -50,23 +50,19 @@ fn run_diff_app(
     title: &str,
     theme: Theme,
 ) -> Result<()> {
-    let events = EventReader::new(Duration::from_millis(100));
+    const TICK: Duration = Duration::from_millis(100);
     let mut show_help = false;
     let mut should_quit = false;
     let mut last_main_area = Rect::default();
 
     loop {
         terminal.draw(|frame| {
-            let layout = UiLayout::from_area(frame.area());
-            let main_area = layout.main;
+            let [toolbar, main_area, status_area] = ui::layout(frame.area());
             last_main_area = main_area;
 
             diff_view.set_viewport_height(main_area.height as usize);
 
-            frame.render_widget(
-                DiffToolbar { title, theme: &theme },
-                layout.toolbar,
-            );
+            frame.render_widget(DiffToolbar { title, theme: &theme }, toolbar);
             diff_view.render(frame, main_area, &theme);
 
             let status = diff_view.status_info();
@@ -77,7 +73,7 @@ fn run_diff_app(
             );
             frame.render_widget(
                 DiffStatusBar { status: &status, stats_str: &stats_str, theme: &theme },
-                layout.status,
+                status_area,
             );
 
             if show_help {
@@ -89,7 +85,7 @@ fn run_diff_app(
             break;
         }
 
-        match events.next()? {
+        match crate::event::poll(TICK)? {
             AppEvent::Key(key) => {
                 if show_help {
                     show_help = false;

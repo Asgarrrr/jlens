@@ -8,28 +8,10 @@ use crate::theme::Theme;
 use crate::util::format_count;
 use crate::views::{StatusInfo, ViewMode};
 
-/// Top-level layout: toolbar (1 line) + main view + status bar (1 line).
-pub struct UiLayout {
-    pub toolbar: Rect,
-    pub main: Rect,
-    pub status: Rect,
-}
-
-impl UiLayout {
-    pub fn from_area(area: Rect) -> Self {
-        let chunks = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
-        .split(area);
-
-        Self {
-            toolbar: chunks[0],
-            main: chunks[1],
-            status: chunks[2],
-        }
-    }
+/// Top-level layout: `[toolbar, main, status]`.
+pub fn layout(area: Rect) -> [Rect; 3] {
+    Layout::vertical([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
+        .areas(area)
 }
 
 /// Render the toolbar with view mode tabs.

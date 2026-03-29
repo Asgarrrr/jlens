@@ -16,7 +16,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use crate::event::{AppEvent, EventReader};
+use crate::event::AppEvent;
 use crate::input;
 use crate::model::lazy::LazyDocument;
 use crate::model::node::{JsonDocument, NodeId};
@@ -24,7 +24,7 @@ use crate::parser;
 use crate::search as search_mod;
 use crate::search::SearchOptions;
 use crate::theme::Theme;
-use crate::ui::{self, UiLayout};
+use crate::ui;
 use crate::views::path::PathView;
 use crate::views::raw::RawView;
 use crate::views::stats::StatsView;
@@ -103,10 +103,7 @@ impl App {
 
     /// Expand a lazy stub node, rebuilding the document and updating views.
     fn expand_lazy_stub(&mut self, stub_id: NodeId) {
-        let lazy = match self.lazy_doc.take() {
-            Some(l) => l,
-            None => return,
-        };
+        let Some(lazy) = self.lazy_doc.take() else { return };
 
         match lazy.expand_node(stub_id) {
             Ok(expanded) => {
@@ -330,28 +327,28 @@ fn run_app(
     if let Some(lazy) = lazy {
         app.set_lazy_document(lazy);
     }
-    let events = EventReader::new(Duration::from_millis(100));
+    const TICK: Duration = Duration::from_millis(100);
 
     loop {
         terminal.draw(|frame| {
-            let layout = UiLayout::from_area(frame.area());
+            let [toolbar, main_area_full, status] = ui::layout(frame.area());
 
             // Reserve 1 line at the bottom of the main area for search, export, or filter bar.
             let needs_bottom_bar =
                 app.search.active || app.export.active || app.filter.active;
             let (main_area, bottom_bar) = if needs_bottom_bar {
                 let chunks = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
-                    .split(layout.main);
+                    .split(main_area_full);
                 (chunks[0], Some(chunks[1]))
             } else {
-                (layout.main, None)
+                (main_area_full, None)
             };
 
             app.last_main_area = main_area;
-            app.last_status_area = layout.status;
+            app.last_status_area = status;
             app.update_viewport_height(main_area.height as usize);
 
-            ui::render_toolbar(frame, layout.toolbar, app.active_mode, &app.theme);
+            ui::render_toolbar(frame, toolbar, app.active_mode, &app.theme);
 
             // If a filter result is showing, render it instead of the normal view.
             if app.filter.showing_result {
@@ -386,7 +383,7 @@ fn run_app(
                 }
             }
 
-            let status = if app.filter.showing_result {
+            let status_info = if app.filter.showing_result {
                 app.filter
                     .result_view
                     .as_ref()
@@ -412,8 +409,8 @@ fn run_app(
                 .or(filter_indicator.as_deref());
             ui::render_status_bar(
                 frame,
-                layout.status,
-                &status,
+                status,
+                &status_info,
                 metadata,
                 flash,
                 &app.theme,
@@ -429,7 +426,7 @@ fn run_app(
             break;
         }
 
-        match events.next()? {
+        match crate::event::poll(TICK)? {
             AppEvent::Key(key) => handle_key(&mut app, key),
             AppEvent::Mouse(mouse) => handle_mouse(&mut app, mouse),
             AppEvent::Resize => {}
