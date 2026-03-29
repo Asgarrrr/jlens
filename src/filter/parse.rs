@@ -250,16 +250,11 @@ impl Parser {
         // bracket accesses that are NOT preceded by another dot (those are
         // handled inside parse_dot_chain already).
         // We re-enter here only for bare `[...]` suffixes attached directly.
-        loop {
-            match self.peek() {
-                Some(Token::LBracket) => {
-                    self.advance(); // consume '['
-                    let suffix = self.parse_index_or_slice()?;
-                    self.expect(&Token::RBracket)?;
-                    expr = Expr::Chain(Box::new(expr), Box::new(suffix));
-                }
-                _ => break,
-            }
+        while let Some(Token::LBracket) = self.peek() {
+            self.advance(); // consume '['
+            let suffix = self.parse_index_or_slice()?;
+            self.expect(&Token::RBracket)?;
+            expr = Expr::Chain(Box::new(expr), Box::new(suffix));
         }
 
         Ok(expr)

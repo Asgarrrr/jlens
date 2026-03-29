@@ -12,6 +12,7 @@ const MMAP_FULL_LIMIT: u64 = 500 * 1024 * 1024; // 500 MB
 /// - Under 50 MB: full serde_json parse with BufReader
 /// - 50-500 MB: memory-mapped file + full serde_json parse (zero-copy read)
 /// - Over 500 MB: memory-mapped + lazy shallow parse (depth 0-1 only)
+///
 /// Like [`parse`] but preserves lazy-loading capabilities for large files.
 pub fn parse_ex(path: &Path) -> Result<ParseOutcome, ParseError> {
     let metadata = std::fs::metadata(path)?;

@@ -204,8 +204,7 @@ impl App {
 
     fn run_search(&mut self) {
         self.search.dirty = false;
-        let mut opts = SearchOptions::default();
-        opts.regex_mode = self.search.regex_mode;
+        let opts = SearchOptions { regex_mode: self.search.regex_mode, ..Default::default() };
         self.search.hits = search_mod::search(&self.document, &self.search.query, &opts);
         self.search.current_hit = 0;
 
@@ -405,7 +404,7 @@ fn run_app(
                 .flash_message
                 .as_ref()
                 .map(|(msg, _)| msg.as_str())
-                .or_else(|| filter_indicator.as_deref());
+                .or(filter_indicator.as_deref());
             ui::render_status_bar(
                 frame,
                 layout.status,

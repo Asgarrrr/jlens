@@ -172,10 +172,10 @@ impl LazyDocument {
         // Append all sub-nodes except the root (index 0) to the main arena,
         // remapping their parent and children IDs.
         for (i, sub_node) in sub_builder.nodes.into_iter().enumerate().skip(1) {
-            let remapped_parent = sub_node.parent.map(|p| remap(p));
+            let remapped_parent = sub_node.parent.map(&remap);
             let remapped_value = match sub_node.value {
                 JsonValue::Array(children) => {
-                    JsonValue::Array(children.into_iter().map(|c| remap(c)).collect())
+                    JsonValue::Array(children.into_iter().map(&remap).collect())
                 }
                 JsonValue::Object(entries) => {
                     JsonValue::Object(entries.into_iter().map(|(k, c)| (k, remap(c))).collect())

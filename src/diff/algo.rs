@@ -93,14 +93,14 @@ fn diff_values(
             }
 
             // Extra items in left → Removed
-            for i in common..left_len {
-                let child = removed_subtree(&left_arr[i], None, Some(i), depth + 1, stats);
+            for (i, item) in left_arr.iter().enumerate().skip(common) {
+                let child = removed_subtree(item, None, Some(i), depth + 1, stats);
                 children.push(child);
             }
 
             // Extra items in right → Added
-            for i in common..right_len {
-                let child = added_subtree(&right_arr[i], None, Some(i), depth + 1, stats);
+            for (i, item) in right_arr.iter().enumerate().skip(common) {
+                let child = added_subtree(item, None, Some(i), depth + 1, stats);
                 children.push(child);
             }
 

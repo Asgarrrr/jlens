@@ -11,6 +11,8 @@ use crate::theme::Theme;
 use crate::views::raw::rebuild_serde_value;
 use crate::views::{StatusInfo, View, ViewAction};
 
+type ChildEntry = (Option<Arc<str>>, Option<usize>, NodeId, bool);
+
 // ---------------------------------------------------------------------------
 // Tree connectors (Unicode box-drawing)
 // ---------------------------------------------------------------------------
@@ -66,6 +68,9 @@ pub struct TreeView {
     visible_rows: Vec<FlattenedRow>,
     dirty: bool,
     search_matches: HashSet<NodeId>,
+    /// The node that is the "active" search hit (n/N navigation target),
+    /// rendered with `theme.search_current` to distinguish it from other matches.
+    current_search_node: Option<NodeId>,
     viewport_height: usize,
     /// Node IDs that are lazy stubs with unparsed children.
     stub_ids: HashSet<NodeId>,
@@ -87,6 +92,7 @@ impl TreeView {
             visible_rows: Vec::new(),
             dirty: true,
             search_matches: HashSet::new(),
+            current_search_node: None,
             viewport_height: 0,
             stub_ids: HashSet::new(),
             pending_expand_stub: None,
@@ -132,7 +138,7 @@ impl TreeView {
 
             // Collect children BEFORE pushing the row, avoiding borrow issues.
             // We gather (key, array_index, child_id, is_last_child) tuples.
-            let children: Vec<(Option<Arc<str>>, Option<usize>, NodeId, bool)> =
+            let children: Vec<ChildEntry> =
                 if is_expanded && is_expandable {
                     match &node.value {
                         JsonValue::Array(ids) => {
@@ -459,7 +465,8 @@ impl TreeView {
             }
         }
 
-        // Determine row highlight: selection takes priority, then search match.
+        // Determine row highlight: selection > current search hit > any search match.
+        let is_current_hit = self.current_search_node == Some(row.node_id);
         let is_search_match = self.search_matches.contains(&row.node_id);
 
         if is_selected {
@@ -470,13 +477,18 @@ impl TreeView {
                 span.style = span.style.bg(theme.selection_bg);
             }
             Line::from(spans).style(sel_style)
+        } else if is_current_hit {
+            let hit_bg = theme.search_current.bg.unwrap_or(theme.selection_bg);
+            for span in &mut spans {
+                span.style = span.style.bg(hit_bg);
+            }
+            Line::from(spans).style(theme.search_current)
         } else if is_search_match {
             let match_bg = theme.search_match.bg.unwrap_or(theme.selection_bg);
-            let match_style = theme.search_match;
             for span in &mut spans {
                 span.style = span.style.bg(match_bg);
             }
-            Line::from(spans).style(match_style)
+            Line::from(spans).style(theme.search_match)
         } else {
             Line::from(spans)
         }
@@ -663,9 +675,18 @@ impl TreeView {
         }
     }
 
-    /// Set the node IDs that match the current search query.
+    /// Replace the set of nodes matching the current search query.
+    /// Clears `current_search_node` since the old active hit is no longer
+    /// meaningful with a new match set.
     pub fn set_search_matches(&mut self, matches: HashSet<NodeId>) {
         self.search_matches = matches;
+        self.current_search_node = None;
+    }
+
+    /// Set which match is the active navigation target (n/N).
+    /// Rendered with `theme.search_current` to distinguish it from other hits.
+    pub fn set_current_search_node(&mut self, id: Option<NodeId>) {
+        self.current_search_node = id;
     }
 
     /// Returns the `NodeId` of the currently selected visible row, if any.
