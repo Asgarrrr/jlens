@@ -1,4 +1,5 @@
 mod diff;
+mod export;
 mod search;
 mod terminal;
 
@@ -32,25 +33,8 @@ use crate::views::table::TableView;
 use crate::views::tree::TreeView;
 use crate::views::{View, ViewAction, ViewMode};
 
+use export::{ExportAction, ExportState};
 use search::{SearchAction, SearchState};
-
-// ---------------------------------------------------------------------------
-// Export state
-// ---------------------------------------------------------------------------
-
-struct ExportState {
-    active: bool,
-    filename: String,
-}
-
-impl ExportState {
-    fn new() -> Self {
-        Self {
-            active: false,
-            filename: String::new(),
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Filter state
@@ -437,7 +421,10 @@ fn run_app(
                 }
             } else if app.export.active {
                 if let Some(area) = bottom_bar {
-                    render_export_bar(frame, area, &app.export, &app.theme);
+                    frame.render_widget(
+                        export::ExportBar { state: &app.export, theme: &app.theme },
+                        area,
+                    );
                 }
             }
 
@@ -494,7 +481,26 @@ fn run_app(
                 } else if app.filter.showing_result {
                     handle_filter_result_key(&mut app, key);
                 } else if app.export.active {
-                    handle_export_key(&mut app, key);
+                    match app.export.handle_key(key) {
+                        ExportAction::Cancel => {
+                            app.export.active = false;
+                            app.export.filename.clear();
+                        }
+                        ExportAction::Confirm => {
+                            let content = export::export_current_view(
+                                &app.document,
+                                app.active_mode,
+                                app.tree_view.selected_node_id(),
+                            );
+                            let result = export::perform_export(&app.export.filename, &content);
+                            match result {
+                                Ok(msg) => app.flash_message = Some((msg, 20)),
+                                Err(msg) => app.flash_message = Some((msg, 20)),
+                            }
+                            app.export.active = false;
+                        }
+                        ExportAction::None => {}
+                    }
                 } else if app.search.active {
                     match app.search.handle_key(key) {
                         SearchAction::Close | SearchAction::CloseOnly => app.search.close(),
@@ -623,7 +629,7 @@ fn handle_action(app: &mut App, action: ViewAction) {
         }
         ViewAction::StartExport => {
             app.export.active = true;
-            app.export.filename = default_export_filename(&app.document);
+            app.export.filename = export::default_export_filename(&app.document);
         }
         ViewAction::OpenFilter => {
             app.filter.open();
@@ -644,108 +650,6 @@ fn handle_action(app: &mut App, action: ViewAction) {
             }
         }
     }
-}
-
-fn handle_export_key(app: &mut App, key: crossterm::event::KeyEvent) {
-    match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc) => {
-            app.export.active = false;
-            app.export.filename.clear();
-        }
-        (KeyModifiers::NONE, KeyCode::Enter) => {
-            perform_export(app);
-            app.export.active = false;
-        }
-        (KeyModifiers::NONE, KeyCode::Backspace) => {
-            app.export.filename.pop();
-        }
-        (KeyModifiers::NONE, KeyCode::Char(c)) => {
-            app.export.filename.push(c);
-        }
-        _ => {}
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Export helpers
-// ---------------------------------------------------------------------------
-
-fn default_export_filename(doc: &JsonDocument) -> String {
-    doc.metadata()
-        .source_path
-        .as_ref()
-        .and_then(|p| p.file_stem())
-        .map(|s| format!("{}_export.json", s.to_string_lossy()))
-        .unwrap_or_else(|| "export.json".to_string())
-}
-
-fn perform_export(app: &mut App) {
-    use std::io::Write;
-    let content = export_current_view(app);
-    match std::fs::File::create(&app.export.filename) {
-        Ok(mut f) => {
-            if f.write_all(content.as_bytes()).is_ok() {
-                app.flash_message =
-                    Some((format!("Exported to {}", app.export.filename), 20));
-            } else {
-                app.flash_message = Some(("Export failed: write error".to_string(), 20));
-            }
-        }
-        Err(e) => {
-            app.flash_message = Some((format!("Export failed: {}", e), 20));
-        }
-    }
-}
-
-fn export_current_view(app: &App) -> String {
-    match app.active_mode {
-        ViewMode::Tree => {
-            // Export the subtree rooted at the selected node, or the full document.
-            let root_id = app
-                .tree_view
-                .selected_node_id()
-                .unwrap_or_else(|| app.document.root());
-            let value = raw::rebuild_serde_value(&app.document, root_id);
-            serde_json::to_string_pretty(&value).unwrap_or_default()
-        }
-        _ => {
-            let value = raw::rebuild_serde_value(&app.document, app.document.root());
-            serde_json::to_string_pretty(&value).unwrap_or_default()
-        }
-    }
-}
-
-fn render_export_bar(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    export: &ExportState,
-    theme: &Theme,
-) {
-    let spans = vec![
-        Span::styled(
-            " Export: ",
-            Style::new()
-                .fg(theme.toolbar_active_fg)
-                .bg(theme.toolbar_active_bg)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            export.filename.clone(),
-            Style::new().fg(theme.fg).bg(theme.bg),
-        ),
-        Span::styled(
-            "\u{2588}",
-            Style::new().fg(theme.toolbar_active_bg).bg(theme.bg),
-        ),
-        Span::styled(
-            "  [Enter] save  [Esc] cancel",
-            Style::new().fg(theme.fg_dim).bg(theme.bg),
-        ),
-    ];
-
-    let line = Line::from(spans);
-    let paragraph = ratatui::widgets::Paragraph::new(line).style(Style::new().bg(theme.bg));
-    frame.render_widget(paragraph, area);
 }
 
 // ---------------------------------------------------------------------------
