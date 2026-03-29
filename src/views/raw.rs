@@ -8,41 +8,61 @@ use crate::theme::Theme;
 use crate::views::{StatusInfo, View, ViewAction};
 
 /// Raw JSON view with syntax highlighting and line numbers.
+///
+/// Stores a single pretty-printed String with byte offsets per line
+/// rather than `Vec<String>`, eliminating N heap allocations.
 pub struct RawView {
-    lines: Vec<String>,
+    pretty: String,
+    line_offsets: Vec<u32>,
     scroll: crate::util::ScrollState,
-    total_lines: usize,
 }
 
 impl RawView {
     pub fn new(document: &JsonDocument) -> Self {
         let json_value = rebuild_serde_value(document, document.root());
         let pretty = serde_json::to_string_pretty(&json_value).unwrap_or_default();
-        let lines: Vec<String> = pretty.lines().map(|l| l.to_string()).collect();
-        let total_lines = lines.len();
+
+        let mut offsets = vec![0u32];
+        for (i, &byte) in pretty.as_bytes().iter().enumerate() {
+            if byte == b'\n' {
+                offsets.push((i + 1) as u32);
+            }
+        }
 
         Self {
-            lines,
+            pretty,
+            line_offsets: offsets,
             scroll: crate::util::ScrollState::new(),
-            total_lines,
         }
     }
 
+    fn total_lines(&self) -> usize {
+        self.line_offsets.len()
+    }
+
+    fn line(&self, idx: usize) -> &str {
+        let start = self.line_offsets[idx] as usize;
+        let end = self.line_offsets
+            .get(idx + 1)
+            .map(|&o| o as usize)
+            .unwrap_or(self.pretty.len());
+        self.pretty[start..end].trim_end_matches('\n')
+    }
 }
 
 impl View for RawView {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let height = area.height as usize;
-        let gutter_width = digit_count(self.total_lines) + 1;
+        let gutter_width = digit_count(self.total_lines()) + 1;
 
         let start = self.scroll.offset;
-        let end = (start + height).min(self.total_lines);
+        let end = (start + height).min(self.total_lines());
 
         let lines: Vec<Line> = (start..end)
             .map(|i| {
                 let is_selected = i == self.scroll.selected;
                 let line_num = format!("{:>width$} ", i + 1, width = gutter_width);
-                let content = self.lines.get(i).map(|s| s.as_str()).unwrap_or("");
+                let content = if i < self.total_lines() { self.line(i) } else { "" };
 
                 let mut spans = vec![Span::styled(
                     line_num,
@@ -64,8 +84,8 @@ impl View for RawView {
             .style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
-        if self.total_lines > height {
-            crate::ui::render_scrollbar(frame, area, self.total_lines, self.scroll.offset, theme);
+        if self.total_lines() > height {
+            crate::ui::render_scrollbar(frame, area, self.total_lines(), self.scroll.offset, theme);
         }
     }
 
@@ -75,17 +95,17 @@ impl View for RawView {
                 self.scroll.move_up();
             }
             (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.scroll.move_down(self.total_lines);
+                self.scroll.move_down(self.total_lines());
             }
             (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::NONE, KeyCode::PageUp) => {
                 self.scroll.page_up(2);
             }
             (KeyModifiers::CONTROL, KeyCode::Char('d')) | (KeyModifiers::NONE, KeyCode::PageDown) => {
-                self.scroll.page_down(self.total_lines, 2);
+                self.scroll.page_down(self.total_lines(), 2);
             }
             (KeyModifiers::NONE, KeyCode::Home) => self.scroll.go_top(),
             (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                self.scroll.go_bottom(self.total_lines);
+                self.scroll.go_bottom(self.total_lines());
             }
             _ => {}
         }
@@ -93,23 +113,23 @@ impl View for RawView {
     }
 
     fn status_info(&self) -> StatusInfo {
-        let pos = if self.total_lines == 0 { 0 } else { self.scroll.selected + 1 };
+        let pos = if self.total_lines() == 0 { 0 } else { self.scroll.selected + 1 };
         StatusInfo {
-            cursor_path: format!("line {}/{}", pos, self.total_lines),
+            cursor_path: format!("line {}/{}", pos, self.total_lines()),
             extra: None,
         }
     }
 
     fn set_viewport_height(&mut self, height: usize) {
         self.scroll.viewport = height;
-        self.scroll.clamp(self.total_lines);
+        self.scroll.clamp(self.total_lines());
     }
 
     fn click_row(&mut self, row_in_viewport: usize) {
         let target = self.scroll.offset + row_in_viewport;
-        if target < self.total_lines {
+        if target < self.total_lines() {
             self.scroll.selected = target;
-            self.scroll.clamp(self.total_lines);
+            self.scroll.clamp(self.total_lines());
         }
     }
 }
@@ -188,133 +208,106 @@ pub(crate) fn rebuild_serde_value(doc: &JsonDocument, id: NodeId) -> serde_json:
 }
 
 /// Simple line-level JSON syntax highlighting.
-fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
+///
+/// Borrows slices of `line` directly — no String allocations per token.
+fn highlight_json_line<'a>(line: &'a str, theme: &Theme) -> Vec<Span<'a>> {
     let mut spans = Vec::new();
-    let mut chars = line.chars().peekable();
-    let mut current = String::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut pos = 0;
 
-    while let Some(&ch) = chars.peek() {
-        match ch {
-            '"' => {
-                // Flush pending
-                if !current.is_empty() {
-                    spans.push(Span::styled(
-                        std::mem::take(&mut current),
-                        theme.fg_style,
-                    ));
+    // Helper: advance `pos` past a run of bytes matching `pred`, return the
+    // borrowed slice.  All characters we care about are ASCII, so byte-level
+    // scanning is correct for the full UTF-8 string.
+
+    while pos < len {
+        let b = bytes[pos];
+
+        match b {
+            // Leading / mid-token whitespace — emit as a single borrow.
+            b' ' | b'\t' => {
+                let start = pos;
+                while pos < len && (bytes[pos] == b' ' || bytes[pos] == b'\t') {
+                    pos += 1;
                 }
-                // Read quoted string
-                let mut s = String::new();
-                s.push(chars.next().unwrap()); // opening quote
+                spans.push(Span::styled(&line[start..pos], theme.fg_style));
+            }
+
+            // Quoted string (key or value).
+            b'"' => {
+                let start = pos;
+                pos += 1; // skip opening quote
                 let mut escaped = false;
-                while let Some(&c) = chars.peek() {
-                    s.push(chars.next().unwrap());
+                while pos < len {
+                    let c = bytes[pos];
+                    pos += 1;
                     if escaped {
                         escaped = false;
-                    } else if c == '\\' {
+                    } else if c == b'\\' {
                         escaped = true;
-                    } else if c == '"' {
-                        break;
+                    } else if c == b'"' {
+                        break; // closing quote consumed
                     }
                 }
-                // Determine if this is a key (followed by ':') or a value
-                // Peek for colon, skipping whitespace
-                let mut lookahead = chars.clone();
-                let mut found_colon = false;
-                while let Some(&c) = lookahead.peek() {
-                    if c == ' ' {
-                        lookahead.next();
-                    } else {
-                        found_colon = c == ':';
-                        break;
+                // Look ahead past optional spaces for ':'
+                let mut look = pos;
+                while look < len && bytes[look] == b' ' {
+                    look += 1;
+                }
+                let is_key = look < len && bytes[look] == b':';
+                let style = if is_key { theme.key } else { theme.string };
+                spans.push(Span::styled(&line[start..pos], style));
+            }
+
+            // Brackets / braces — single ASCII byte, safe to slice by byte offset.
+            b'{' | b'}' | b'[' | b']' => {
+                spans.push(Span::styled(&line[pos..pos + 1], theme.bracket));
+                pos += 1;
+            }
+
+            // Comma, colon — punctuation with default fg style.
+            b',' | b':' => {
+                spans.push(Span::styled(&line[pos..pos + 1], theme.fg_style));
+                pos += 1;
+            }
+
+            // Keywords: true / false / null, and any other alphabetic run.
+            b't' | b'f' | b'n' | b'a'..=b'z' | b'A'..=b'Z' => {
+                let start = pos;
+                while pos < len && bytes[pos].is_ascii_alphabetic() {
+                    pos += 1;
+                }
+                let word = &line[start..pos];
+                let style = match word {
+                    "true" | "false" => theme.boolean,
+                    "null" => theme.null,
+                    _ => theme.fg_style,
+                };
+                spans.push(Span::styled(word, style));
+            }
+
+            // Numbers: optional leading minus, digits, '.', 'e'/'E', '+'/'-'.
+            b'-' | b'0'..=b'9' => {
+                let start = pos;
+                while pos < len {
+                    match bytes[pos] {
+                        b'0'..=b'9' | b'.' | b'-' | b'+' | b'e' | b'E' => pos += 1,
+                        _ => break,
                     }
                 }
-                if found_colon {
-                    spans.push(Span::styled(s, theme.key));
-                } else {
-                    spans.push(Span::styled(s, theme.string));
-                }
+                spans.push(Span::styled(&line[start..pos], theme.number));
             }
-            '{' | '}' | '[' | ']' => {
-                if !current.is_empty() {
-                    spans.push(Span::styled(
-                        std::mem::take(&mut current),
-                        theme.fg_style,
-                    ));
-                }
-                spans.push(Span::styled(
-                    chars.next().unwrap().to_string(),
-                    theme.bracket,
-                ));
-            }
-            't' | 'f' => {
-                if !current.is_empty() {
-                    spans.push(Span::styled(
-                        std::mem::take(&mut current),
-                        theme.fg_style,
-                    ));
-                }
-                let mut word = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c.is_alphabetic() {
-                        word.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                if word == "true" || word == "false" {
-                    spans.push(Span::styled(word, theme.boolean));
-                } else {
-                    spans.push(Span::styled(word, theme.fg_style));
-                }
-            }
-            'n' => {
-                if !current.is_empty() {
-                    spans.push(Span::styled(
-                        std::mem::take(&mut current),
-                        theme.fg_style,
-                    ));
-                }
-                let mut word = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c.is_alphabetic() {
-                        word.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                if word == "null" {
-                    spans.push(Span::styled(word, theme.null));
-                } else {
-                    spans.push(Span::styled(word, theme.fg_style));
-                }
-            }
-            c if c == '-' || c.is_ascii_digit() => {
-                if !current.is_empty() {
-                    spans.push(Span::styled(
-                        std::mem::take(&mut current),
-                        theme.fg_style,
-                    ));
-                }
-                let mut num = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c.is_ascii_digit() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E'
-                    {
-                        num.push(chars.next().unwrap());
-                    } else {
-                        break;
-                    }
-                }
-                spans.push(Span::styled(num, theme.number));
-            }
+
+            // Anything else (should not normally appear in pretty-printed JSON,
+            // but handle gracefully by borrowing one UTF-8 character at a time).
             _ => {
-                current.push(chars.next().unwrap());
+                let start = pos;
+                // Advance by one Unicode scalar value to keep slices valid.
+                let ch = line[pos..].chars().next().unwrap_or('\0');
+                pos += ch.len_utf8();
+                spans.push(Span::styled(&line[start..pos], theme.fg_style));
             }
         }
-    }
-
-    if !current.is_empty() {
-        spans.push(Span::styled(current, theme.fg_style));
     }
 
     spans
