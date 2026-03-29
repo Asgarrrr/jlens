@@ -1,11 +1,12 @@
 mod diff;
+mod search;
 mod terminal;
 
 use std::collections::HashSet;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -20,7 +21,8 @@ use crate::input;
 use crate::model::lazy::LazyDocument;
 use crate::model::node::{JsonDocument, NodeId};
 use crate::parser;
-use crate::search::{self, SearchHit, SearchOptions};
+use crate::search as search_mod;
+use crate::search::SearchOptions;
 use crate::theme::Theme;
 use crate::ui::{self, UiLayout};
 use crate::views::path::PathView;
@@ -30,76 +32,7 @@ use crate::views::table::TableView;
 use crate::views::tree::TreeView;
 use crate::views::{View, ViewAction, ViewMode};
 
-// ---------------------------------------------------------------------------
-// Search state
-// ---------------------------------------------------------------------------
-
-/// Debounce delay before triggering search after the last keystroke.
-const SEARCH_DEBOUNCE: Duration = Duration::from_millis(150);
-
-struct SearchState {
-    active: bool,
-    query: String,
-    hits: Vec<SearchHit>,
-    current_hit: usize,
-    /// Set when the query changed; cleared after the search actually runs.
-    dirty: bool,
-    last_keystroke: Instant,
-    /// When true the query is interpreted as a regular expression.
-    regex_mode: bool,
-}
-
-impl SearchState {
-    fn new() -> Self {
-        Self {
-            active: false,
-            query: String::new(),
-            hits: Vec::new(),
-            current_hit: 0,
-            dirty: false,
-            last_keystroke: Instant::now(),
-            regex_mode: false,
-        }
-    }
-
-    fn open(&mut self) {
-        self.active = true;
-        self.query.clear();
-        self.hits.clear();
-        self.current_hit = 0;
-        self.dirty = false;
-    }
-
-    fn close(&mut self) {
-        self.active = false;
-        self.dirty = false;
-    }
-
-    fn mark_dirty(&mut self) {
-        self.dirty = true;
-        self.last_keystroke = Instant::now();
-    }
-
-    fn should_search(&self) -> bool {
-        self.dirty && self.last_keystroke.elapsed() >= SEARCH_DEBOUNCE
-    }
-
-    fn next_hit(&mut self) {
-        if !self.hits.is_empty() {
-            self.current_hit = (self.current_hit + 1) % self.hits.len();
-        }
-    }
-
-    fn prev_hit(&mut self) {
-        if !self.hits.is_empty() {
-            self.current_hit = if self.current_hit == 0 {
-                self.hits.len() - 1
-            } else {
-                self.current_hit - 1
-            };
-        }
-    }
-}
+use search::{SearchAction, SearchState};
 
 // ---------------------------------------------------------------------------
 // Export state
@@ -338,7 +271,7 @@ impl App {
         self.search.dirty = false;
         let mut opts = SearchOptions::default();
         opts.regex_mode = self.search.regex_mode;
-        self.search.hits = search::search(&self.document, &self.search.query, &opts);
+        self.search.hits = search_mod::search(&self.document, &self.search.query, &opts);
         self.search.current_hit = 0;
 
         // Feed matching node IDs to the tree view for O(1) highlight lookup
@@ -497,7 +430,10 @@ fn run_app(
                 }
             } else if app.search.active {
                 if let Some(area) = bottom_bar {
-                    render_search_bar(frame, area, &app.search, &app.theme);
+                    frame.render_widget(
+                        search::SearchBar { state: &app.search, theme: &app.theme },
+                        area,
+                    );
                 }
             } else if app.export.active {
                 if let Some(area) = bottom_bar {
@@ -560,7 +496,17 @@ fn run_app(
                 } else if app.export.active {
                     handle_export_key(&mut app, key);
                 } else if app.search.active {
-                    handle_search_key(&mut app, key);
+                    match app.search.handle_key(key) {
+                        SearchAction::Close | SearchAction::CloseOnly => app.search.close(),
+                        SearchAction::RunSearchAndClose => {
+                            app.run_search();
+                            app.search.close();
+                        }
+                        SearchAction::Navigate => app.navigate_to_current_hit(),
+                        SearchAction::QueryChanged
+                        | SearchAction::ToggleRegex
+                        | SearchAction::None => {}
+                    }
                 } else {
                     let global_action = input::handle_global_key(key);
                     match global_action {
@@ -597,42 +543,6 @@ fn run_app(
     }
 
     Ok(())
-}
-
-fn handle_search_key(app: &mut App, key: crossterm::event::KeyEvent) {
-    match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc) => {
-            app.search.close();
-        }
-        (KeyModifiers::NONE, KeyCode::Enter) => {
-            // Run search immediately if there are pending changes, then close
-            if app.search.dirty {
-                app.run_search();
-            }
-            app.search.close();
-        }
-        (KeyModifiers::NONE, KeyCode::Backspace) => {
-            app.search.query.pop();
-            app.search.mark_dirty();
-        }
-        (KeyModifiers::NONE, KeyCode::Char(c)) => {
-            app.search.query.push(c);
-            app.search.mark_dirty();
-        }
-        (KeyModifiers::CONTROL, KeyCode::Char('n')) | (KeyModifiers::NONE, KeyCode::Down) => {
-            app.search.next_hit();
-            app.navigate_to_current_hit();
-        }
-        (KeyModifiers::CONTROL, KeyCode::Char('p')) | (KeyModifiers::NONE, KeyCode::Up) => {
-            app.search.prev_hit();
-            app.navigate_to_current_hit();
-        }
-        (KeyModifiers::CONTROL, KeyCode::Char('r')) => {
-            app.search.regex_mode = !app.search.regex_mode;
-            app.search.mark_dirty();
-        }
-        _ => {}
-    }
 }
 
 fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
@@ -803,63 +713,6 @@ fn export_current_view(app: &App) -> String {
             serde_json::to_string_pretty(&value).unwrap_or_default()
         }
     }
-}
-
-fn render_search_bar(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    search: &SearchState,
-    theme: &Theme,
-) {
-    let hit_info = if search.hits.is_empty() {
-        if search.query.is_empty() {
-            String::new()
-        } else {
-            " No matches".to_string()
-        }
-    } else {
-        format!(" {}/{}", search.current_hit + 1, search.hits.len())
-    };
-
-    let mut spans = vec![
-        Span::styled(
-            " / ",
-            Style::new()
-                .fg(theme.toolbar_active_fg)
-                .bg(theme.toolbar_active_bg)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ];
-
-    if search.regex_mode {
-        spans.push(Span::styled(
-            "[.*] ",
-            Style::new()
-                .fg(theme.toolbar_active_bg)
-                .bg(theme.bg)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-
-    spans.extend([
-        Span::styled(
-            search.query.clone(),
-            Style::new().fg(theme.fg).bg(theme.bg),
-        ),
-        Span::styled(
-            "█",
-            Style::new().fg(theme.toolbar_active_bg).bg(theme.bg),
-        ),
-        Span::styled(
-            hit_info,
-            Style::new().fg(theme.fg_dim).bg(theme.bg),
-        ),
-    ]);
-
-    let line = Line::from(spans);
-    let paragraph = ratatui::widgets::Paragraph::new(line)
-        .style(Style::new().bg(theme.bg));
-    frame.render_widget(paragraph, area);
 }
 
 fn render_export_bar(
