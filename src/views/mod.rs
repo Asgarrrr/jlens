@@ -78,8 +78,7 @@ pub trait View {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme);
     fn handle_key(&mut self, key: KeyEvent) -> ViewAction;
     fn status_info(&self) -> StatusInfo;
-    #[allow(unused)]
-    fn search_highlights(&self) -> &[NodeId];
+    fn set_viewport_height(&mut self, height: usize);
     /// Handle a mouse click on a row within the viewport.
     /// `row_in_viewport` is 0-based from the top of the visible area.
     fn click_row(&mut self, _row_in_viewport: usize) {}

@@ -194,12 +194,17 @@ impl App {
 
     fn update_viewport_height(&mut self, height: usize) {
         self.last_viewport_height = height;
-        self.tree_view.set_viewport_height(height);
-        if let Some(ref mut v) = self.raw_view { v.set_viewport_height(height); }
-        if let Some(ref mut v) = self.table_view { v.set_viewport_height(height); }
-        if let Some(ref mut v) = self.path_view { v.set_viewport_height(height); }
-        if let Some(ref mut v) = self.stats_view { v.set_viewport_height(height); }
-        if let Some(ref mut v) = self.filter.result_view { v.set_viewport_height(height); }
+        let views: [Option<&mut dyn View>; 6] = [
+            Some(&mut self.tree_view),
+            self.raw_view.as_mut().map(|v| v as &mut dyn View),
+            self.table_view.as_mut().map(|v| v as &mut dyn View),
+            self.path_view.as_mut().map(|v| v as &mut dyn View),
+            self.stats_view.as_mut().map(|v| v as &mut dyn View),
+            self.filter.result_view.as_mut().map(|v| v as &mut dyn View),
+        ];
+        for view in views.into_iter().flatten() {
+            view.set_viewport_height(height);
+        }
     }
 
     fn run_search(&mut self) {
@@ -425,88 +430,8 @@ fn run_app(
         }
 
         match events.next()? {
-            AppEvent::Key(key) => {
-                if app.show_help {
-                    // Any key dismisses the help overlay
-                    app.show_help = false;
-                } else if app.filter.active {
-                    match app.filter.handle_input_key(key) {
-                        FilterAction::CloseInput => app.filter.close_input(),
-                        FilterAction::RunFilter => {
-                            filter::run_filter(
-                                &mut app.filter,
-                                &app.document,
-                                app.last_viewport_height,
-                            );
-                        }
-                        FilterAction::None
-                        | FilterAction::CloseResult
-                        | FilterAction::ReopenInput
-                        | FilterAction::DelegateToResult(_) => {}
-                    }
-                } else if app.filter.showing_result {
-                    match app.filter.handle_result_key(key) {
-                        FilterAction::CloseResult => app.filter.close_result(),
-                        FilterAction::ReopenInput => app.filter.open(),
-                        FilterAction::DelegateToResult(k) => {
-                            if let Some(ref mut view) = app.filter.result_view {
-                                let action = view.handle_key(k);
-                                handle_action(&mut app, action);
-                            }
-                        }
-                        FilterAction::None
-                        | FilterAction::CloseInput
-                        | FilterAction::RunFilter => {}
-                    }
-                } else if app.export.active {
-                    match app.export.handle_key(key) {
-                        ExportAction::Cancel => {
-                            app.export.active = false;
-                            app.export.filename.clear();
-                        }
-                        ExportAction::Confirm => {
-                            let content = export::export_current_view(
-                                &app.document,
-                                app.active_mode,
-                                app.tree_view.selected_node_id(),
-                            );
-                            let result = export::perform_export(&app.export.filename, &content);
-                            match result {
-                                Ok(msg) => app.flash_message = Some((msg, 20)),
-                                Err(msg) => app.flash_message = Some((msg, 20)),
-                            }
-                            app.export.active = false;
-                        }
-                        ExportAction::None => {}
-                    }
-                } else if app.search.active {
-                    match app.search.handle_key(key) {
-                        SearchAction::Close | SearchAction::CloseOnly => app.search.close(),
-                        SearchAction::RunSearchAndClose => {
-                            app.run_search();
-                            app.search.close();
-                        }
-                        SearchAction::Navigate => app.navigate_to_current_hit(),
-                        SearchAction::QueryChanged
-                        | SearchAction::ToggleRegex
-                        | SearchAction::None => {}
-                    }
-                } else {
-                    let global_action = input::handle_global_key(key);
-                    match global_action {
-                        ViewAction::None => {
-                            let action = app.active_view_mut().handle_key(key);
-                            handle_action(&mut app, action);
-                        }
-                        action => {
-                            handle_action(&mut app, action);
-                        }
-                    }
-                }
-            }
-            AppEvent::Mouse(mouse) => {
-                handle_mouse(&mut app, mouse);
-            }
+            AppEvent::Key(key) => handle_key(&mut app, key),
+            AppEvent::Mouse(mouse) => handle_mouse(&mut app, mouse),
             AppEvent::Resize => {}
             AppEvent::Tick => {
                 // Debounced search: run after the user stops typing
@@ -527,6 +452,95 @@ fn run_app(
     }
 
     Ok(())
+}
+
+fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
+    if app.show_help {
+        app.show_help = false;
+        return;
+    }
+
+    if app.filter.active {
+        match app.filter.handle_input_key(key) {
+            FilterAction::CloseInput => app.filter.close_input(),
+            FilterAction::RunFilter => {
+                filter::run_filter(
+                    &mut app.filter,
+                    &app.document,
+                    app.last_viewport_height,
+                );
+            }
+            FilterAction::None
+            | FilterAction::CloseResult
+            | FilterAction::ReopenInput
+            | FilterAction::DelegateToResult(_) => {}
+        }
+        return;
+    }
+
+    if app.filter.showing_result {
+        match app.filter.handle_result_key(key) {
+            FilterAction::CloseResult => app.filter.close_result(),
+            FilterAction::ReopenInput => app.filter.open(),
+            FilterAction::DelegateToResult(k) => {
+                if let Some(ref mut view) = app.filter.result_view {
+                    let action = view.handle_key(k);
+                    handle_action(app, action);
+                }
+            }
+            FilterAction::None
+            | FilterAction::CloseInput
+            | FilterAction::RunFilter => {}
+        }
+        return;
+    }
+
+    if app.export.active {
+        match app.export.handle_key(key) {
+            ExportAction::Cancel => {
+                app.export.active = false;
+                app.export.filename.clear();
+            }
+            ExportAction::Confirm => {
+                let content = export::export_current_view(
+                    &app.document,
+                    app.active_mode,
+                    app.tree_view.selected_node_id(),
+                );
+                let result = export::perform_export(&app.export.filename, &content);
+                match result {
+                    Ok(msg) => app.flash_message = Some((msg, 20)),
+                    Err(msg) => app.flash_message = Some((msg, 20)),
+                }
+                app.export.active = false;
+            }
+            ExportAction::None => {}
+        }
+        return;
+    }
+
+    if app.search.active {
+        match app.search.handle_key(key) {
+            SearchAction::Close | SearchAction::CloseOnly => app.search.close(),
+            SearchAction::RunSearchAndClose => {
+                app.run_search();
+                app.search.close();
+            }
+            SearchAction::Navigate => app.navigate_to_current_hit(),
+            SearchAction::QueryChanged
+            | SearchAction::ToggleRegex
+            | SearchAction::None => {}
+        }
+        return;
+    }
+
+    let action = input::handle_global_key(key);
+    if matches!(action, ViewAction::None) {
+        let action = app.active_view_mut().handle_key(key);
+        handle_action(app, action);
+    } else {
+        handle_action(app, action);
+    }
 }
 
 fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {

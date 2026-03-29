@@ -7,7 +7,6 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::diff::{DiffNode, DiffResult, DiffStats, DiffStatus};
-use crate::model::node::NodeId;
 use crate::theme::Theme;
 use crate::util::ScrollState;
 use crate::views::{StatusInfo, View, ViewAction};
@@ -37,8 +36,10 @@ struct FlatRow {
 pub struct DiffView {
     result: DiffResult,
     rows: Vec<FlatRow>,
-    /// Set of row indices (in `rows`) that are currently expanded.
-    expanded: HashSet<usize>,
+    /// Expanded nodes, identified by their stable path through the DiffResult
+    /// tree (sequence of child indices from the root). Unlike row indices,
+    /// these don't shift when the flattened row list is rebuilt.
+    expanded: HashSet<Vec<usize>>,
     scroll: ScrollState,
 }
 
@@ -54,11 +55,6 @@ impl DiffView {
         view
     }
 
-    pub fn set_viewport_height(&mut self, height: usize) {
-        self.scroll.viewport = height;
-        self.scroll.clamp(self.rows.len());
-    }
-
     pub fn stats(&self) -> &DiffStats {
         &self.result.stats
     }
@@ -70,21 +66,12 @@ impl DiffView {
     fn rebuild_rows(&mut self) {
         self.rows.clear();
 
-        // Stack frames: (node reference path from root, child index within parent)
         struct Frame {
             node_path: Vec<usize>,
             key: Option<String>,
             array_index: Option<usize>,
         }
 
-        // Seed with root
-        let root_expandable = !self.result.root.children.is_empty();
-        // The root row gets index 0 after push.
-        // We use an iterative stack that also carries the parent row index so we
-        // can look up expanded state correctly.
-
-        // Encode stack as: (path_to_node_from_root_children_indices, key, array_index)
-        // but the root node itself has path = [] (empty = root).
         let mut stack: Vec<Frame> = vec![Frame {
             node_path: vec![],
             key: self.result.root.key.clone(),
@@ -93,17 +80,17 @@ impl DiffView {
 
         while let Some(frame) = stack.pop() {
             let node = self.node_at(&frame.node_path);
-            let row_idx = self.rows.len();
             let is_container = !node.children.is_empty();
-            let is_expanded = self.expanded.contains(&row_idx);
+            let is_expanded = self.expanded.contains(&frame.node_path);
 
-            // Extract all data from the node before the mutable borrow on self.rows.
+            // Extract all data from the node before the mutable borrow on
+            // self.rows (the push below). The `node` reference borrows
+            // `self.result` immutably; `self.rows.push` borrows `self` mutably.
             let status = node.status;
             let left = node.left.clone();
             let right = node.right.clone();
             let depth = node.depth;
 
-            // Collect child frames if expanded (while node borrow is still active).
             let child_frames: Vec<Frame> = if is_container && is_expanded {
                 (0..node.children.len())
                     .rev()
@@ -120,7 +107,6 @@ impl DiffView {
             } else {
                 Vec::new()
             };
-            // `node` borrow is now released.
 
             self.rows.push(FlatRow {
                 node_path: frame.node_path,
@@ -137,10 +123,8 @@ impl DiffView {
             stack.extend(child_frames);
         }
 
-        // Clamp scroll after rebuild
         let total = self.rows.len();
         self.scroll.clamp(total.max(1));
-        _ = root_expandable;
     }
 
     fn node_at(&self, path: &[usize]) -> &DiffNode {
@@ -158,11 +142,11 @@ impl DiffView {
     fn toggle_expand(&mut self) {
         if let Some(row) = self.rows.get(self.scroll.selected) {
             if row.is_container {
-                let idx = self.scroll.selected;
-                if self.expanded.contains(&idx) {
-                    self.expanded.remove(&idx);
+                let path = row.node_path.clone();
+                if self.expanded.contains(&path) {
+                    self.expanded.remove(&path);
                 } else {
-                    self.expanded.insert(idx);
+                    self.expanded.insert(path);
                 }
                 self.rebuild_rows();
             }
@@ -172,17 +156,16 @@ impl DiffView {
     fn expand(&mut self) {
         if let Some(row) = self.rows.get(self.scroll.selected) {
             if row.is_container && !row.is_expanded {
-                self.expanded.insert(self.scroll.selected);
+                self.expanded.insert(row.node_path.clone());
                 self.rebuild_rows();
             }
         }
     }
 
     fn collapse(&mut self) {
-        let selected = self.scroll.selected;
-        if let Some(row) = self.rows.get(selected) {
+        if let Some(row) = self.rows.get(self.scroll.selected) {
             if row.is_expanded {
-                self.expanded.remove(&selected);
+                self.expanded.remove(&row.node_path);
                 self.rebuild_rows();
             }
         }
@@ -398,8 +381,9 @@ impl View for DiffView {
         }
     }
 
-    fn search_highlights(&self) -> &[NodeId] {
-        &[]
+    fn set_viewport_height(&mut self, height: usize) {
+        self.scroll.viewport = height;
+        self.scroll.clamp(self.rows.len());
     }
 
     fn click_row(&mut self, row_in_viewport: usize) {
@@ -429,5 +413,82 @@ fn value_display(v: &serde_json::Value) -> String {
         }
         serde_json::Value::Array(a) => format!("[{} items]", a.len()),
         serde_json::Value::Object(m) => format!("{{{} keys}}", m.len()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diff::algo;
+    use serde_json::json;
+
+    /// Regression test: expanding node A, then expanding node B (whose children
+    /// insert rows *above* A) must not collapse A.
+    ///
+    /// The old code tracked expanded state by row index. After B's expansion
+    /// shifted rows, A's index changed but the expanded set still held the
+    /// stale index, causing A to appear collapsed.
+    #[test]
+    fn expand_survives_row_index_shift() {
+        // Two modified objects so both are expandable containers.
+        let left = json!({"a": {"x": 1}, "b": {"y": 2}});
+        let right = json!({"a": {"x": 1, "z": 3}, "b": {"y": 2, "w": 4}});
+        let result = algo::diff(&left, &right);
+
+        let mut view = DiffView::new(result);
+        view.scroll.viewport = 50;
+
+        // Step 1: expand root to reveal children "a" and "b".
+        assert!(view.rows[0].is_container);
+        view.expand(); // root is selected by default
+
+        // Step 2: expand "b" (appears after "a" in sorted order).
+        let b_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
+        view.scroll.selected = b_idx;
+        view.expand();
+        assert!(view.rows[b_idx].is_expanded);
+
+        // Step 3: expand "a" — its children insert rows BEFORE "b", shifting
+        //         "b" to a higher row index.
+        let a_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("a")).unwrap();
+        view.scroll.selected = a_idx;
+        view.expand();
+
+        // Verify: "b" must still be expanded despite its row index having changed.
+        let b_idx_after = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
+        assert_ne!(b_idx, b_idx_after, "b should have moved to a different row index");
+        assert!(view.rows[b_idx_after].is_expanded, "b must remain expanded after row shift");
+    }
+
+    #[test]
+    fn collapse_after_row_shift() {
+        let left = json!({"a": {"x": 1}, "b": {"y": 2}});
+        let right = json!({"a": {"x": 1, "z": 3}, "b": {"y": 2, "w": 4}});
+        let result = algo::diff(&left, &right);
+
+        let mut view = DiffView::new(result);
+        view.scroll.viewport = 50;
+
+        // Expand root, then both children.
+        view.expand();
+        let a_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("a")).unwrap();
+        view.scroll.selected = a_idx;
+        view.expand();
+        let b_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
+        view.scroll.selected = b_idx;
+        view.expand();
+
+        // Collapse "a" — rows shift, "b" moves up.
+        let a_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("a")).unwrap();
+        view.scroll.selected = a_idx;
+        view.collapse();
+
+        // "b" must still be expanded.
+        let b_idx_after = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
+        assert!(view.rows[b_idx_after].is_expanded, "b must remain expanded after a is collapsed");
     }
 }

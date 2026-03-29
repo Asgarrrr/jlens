@@ -9,6 +9,7 @@ use ratatui::Frame;
 
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
 use crate::theme::Theme;
+use crate::util::format_count;
 use crate::views::{StatusInfo, View, ViewAction};
 
 /// Stats/summary view showing document-level metrics.
@@ -48,10 +49,6 @@ impl StatsView {
         }
     }
 
-    pub fn set_viewport_height(&mut self, height: usize) {
-        self.scroll.viewport = height;
-        self.scroll.clamp(self.lines.len());
-    }
 }
 
 impl View for StatsView {
@@ -142,8 +139,9 @@ impl View for StatsView {
         }
     }
 
-    fn search_highlights(&self) -> &[NodeId] {
-        &[]
+    fn set_viewport_height(&mut self, height: usize) {
+        self.scroll.viewport = height;
+        self.scroll.clamp(self.lines.len());
     }
 
     fn click_row(&mut self, row_in_viewport: usize) {
@@ -380,14 +378,3 @@ fn build_stats_lines(
     lines
 }
 
-fn format_count(n: usize) -> String {
-    let s = n.to_string();
-    let mut result = String::with_capacity(s.len() + s.len() / 3);
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
-            result.push(',');
-        }
-        result.push(c);
-    }
-    result
-}

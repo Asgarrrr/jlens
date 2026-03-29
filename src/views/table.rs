@@ -114,11 +114,6 @@ impl TableView {
         }
     }
 
-    pub fn set_viewport_height(&mut self, height: usize) {
-        self.scroll.viewport = height.saturating_sub(3);
-        self.scroll.clamp(self.rows.len());
-    }
-
     // -----------------------------------------------------------------------
     // Sorting
     // -----------------------------------------------------------------------
@@ -320,8 +315,9 @@ impl View for TableView {
         }
     }
 
-    fn search_highlights(&self) -> &[NodeId] {
-        &[]
+    fn set_viewport_height(&mut self, height: usize) {
+        self.scroll.viewport = height.saturating_sub(3);
+        self.scroll.clamp(self.rows.len());
     }
 
     fn click_row(&mut self, row_in_viewport: usize) {

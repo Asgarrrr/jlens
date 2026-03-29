@@ -38,10 +38,6 @@ impl PathView {
         }
     }
 
-    pub fn set_viewport_height(&mut self, height: usize) {
-        self.scroll.viewport = height;
-        self.scroll.clamp(self.entries.len());
-    }
 }
 
 impl View for PathView {
@@ -149,8 +145,9 @@ impl View for PathView {
         }
     }
 
-    fn search_highlights(&self) -> &[NodeId] {
-        &[]
+    fn set_viewport_height(&mut self, height: usize) {
+        self.scroll.viewport = height;
+        self.scroll.clamp(self.entries.len());
     }
 
     fn click_row(&mut self, row_in_viewport: usize) {

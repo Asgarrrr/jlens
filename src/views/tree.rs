@@ -626,9 +626,9 @@ impl View for TreeView {
         }
     }
 
-    fn search_highlights(&self) -> &[NodeId] {
-        // Tree view handles search highlighting internally via self.search_matches HashSet.
-        &[]
+    fn set_viewport_height(&mut self, height: usize) {
+        self.viewport_height = height;
+        self.ensure_visible();
     }
 
     fn click_row(&mut self, row_in_viewport: usize) {
@@ -641,11 +641,6 @@ impl View for TreeView {
 }
 
 impl TreeView {
-    pub fn set_viewport_height(&mut self, height: usize) {
-        self.viewport_height = height;
-        self.ensure_visible();
-    }
-
     #[allow(dead_code)]
     pub fn document(&self) -> &JsonDocument {
         &self.document

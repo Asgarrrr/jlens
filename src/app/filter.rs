@@ -12,6 +12,7 @@ use crate::model::node::{DocumentBuilder, JsonDocument};
 use crate::theme::Theme;
 use crate::views::raw;
 use crate::views::tree::TreeView;
+use crate::views::View;
 
 pub(crate) struct FilterState {
     pub(crate) active: bool,
