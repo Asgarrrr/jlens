@@ -1,5 +1,6 @@
 mod diff;
 mod export;
+mod filter;
 mod search;
 mod terminal;
 
@@ -12,8 +13,6 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
@@ -27,63 +26,15 @@ use crate::search::SearchOptions;
 use crate::theme::Theme;
 use crate::ui::{self, UiLayout};
 use crate::views::path::PathView;
-use crate::views::raw::{self, RawView};
+use crate::views::raw::RawView;
 use crate::views::stats::StatsView;
 use crate::views::table::TableView;
 use crate::views::tree::TreeView;
 use crate::views::{View, ViewAction, ViewMode};
 
 use export::{ExportAction, ExportState};
+use filter::{FilterAction, FilterState};
 use search::{SearchAction, SearchState};
-
-// ---------------------------------------------------------------------------
-// Filter state
-// ---------------------------------------------------------------------------
-
-struct FilterState {
-    /// True while the filter input bar is open for typing.
-    active: bool,
-    /// The expression typed by the user.
-    query: String,
-    /// Parse or eval error message, shown in the bar.
-    error: Option<String>,
-    /// True while the result tree is displayed.
-    showing_result: bool,
-    /// The result tree view (if a successful eval has been run).
-    result_view: Option<TreeView>,
-    /// Backing document for the result tree.
-    result_doc: Option<Arc<JsonDocument>>,
-}
-
-impl FilterState {
-    fn new() -> Self {
-        Self {
-            active: false,
-            query: String::new(),
-            error: None,
-            showing_result: false,
-            result_view: None,
-            result_doc: None,
-        }
-    }
-
-    fn open(&mut self) {
-        self.active = true;
-        self.query.clear();
-        self.error = None;
-    }
-
-    fn close_input(&mut self) {
-        self.active = false;
-        self.error = None;
-    }
-
-    fn close_result(&mut self) {
-        self.showing_result = false;
-        self.result_view = None;
-        self.result_doc = None;
-    }
-}
 
 // ---------------------------------------------------------------------------
 // App
@@ -410,7 +361,10 @@ fn run_app(
             // Bottom bar: filter input > search > export (mutually exclusive)
             if app.filter.active {
                 if let Some(area) = bottom_bar {
-                    render_filter_bar(frame, area, &app.filter, &app.theme);
+                    frame.render_widget(
+                        filter::FilterBar { state: &app.filter, theme: &app.theme },
+                        area,
+                    );
                 }
             } else if app.search.active {
                 if let Some(area) = bottom_bar {
@@ -477,9 +431,31 @@ fn run_app(
                     // Any key dismisses the help overlay
                     app.show_help = false;
                 } else if app.filter.active {
-                    handle_filter_key(&mut app, key);
+                    match app.filter.handle_input_key(key) {
+                        FilterAction::CloseInput => app.filter.close_input(),
+                        FilterAction::RunFilter => {
+                            filter::run_filter(
+                                &mut app.filter,
+                                &app.document,
+                                app.last_viewport_height,
+                            );
+                        }
+                        FilterAction::None => {}
+                        _ => {}
+                    }
                 } else if app.filter.showing_result {
-                    handle_filter_result_key(&mut app, key);
+                    match app.filter.handle_result_key(key) {
+                        FilterAction::CloseResult => app.filter.close_result(),
+                        FilterAction::ReopenInput => app.filter.open(),
+                        FilterAction::DelegateToResult(k) => {
+                            if let Some(ref mut view) = app.filter.result_view {
+                                let action = view.handle_key(k);
+                                handle_action(&mut app, action);
+                            }
+                        }
+                        FilterAction::None => {}
+                        _ => {}
+                    }
                 } else if app.export.active {
                     match app.export.handle_key(key) {
                         ExportAction::Cancel => {
@@ -652,137 +628,3 @@ fn handle_action(app: &mut App, action: ViewAction) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Filter key handlers
-// ---------------------------------------------------------------------------
-
-/// Handle keys while the filter input bar is open (typing mode).
-fn handle_filter_key(app: &mut App, key: crossterm::event::KeyEvent) {
-    match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc) => {
-            app.filter.close_input();
-        }
-        (KeyModifiers::NONE, KeyCode::Enter) => {
-            run_filter(app);
-        }
-        (KeyModifiers::NONE, KeyCode::Backspace) => {
-            app.filter.query.pop();
-            // Clear any stale error as the user edits.
-            app.filter.error = None;
-        }
-        (KeyModifiers::NONE, KeyCode::Char(c)) => {
-            app.filter.query.push(c);
-            app.filter.error = None;
-        }
-        _ => {}
-    }
-}
-
-/// Handle keys while a filter result is displayed (navigation mode).
-fn handle_filter_result_key(app: &mut App, key: crossterm::event::KeyEvent) {
-    match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc) => {
-            app.filter.close_result();
-        }
-        // Re-open the filter bar to refine the query.
-        (KeyModifiers::NONE, KeyCode::Char(':')) => {
-            app.filter.open();
-        }
-        _ => {
-            // Delegate navigation keys to the result tree view.
-            if let Some(ref mut view) = app.filter.result_view {
-                view.handle_key(key);
-            }
-        }
-    }
-}
-
-/// Parse and evaluate the current filter query, updating `app.filter`.
-fn run_filter(app: &mut App) {
-    let query = app.filter.query.trim().to_string();
-
-    // Parse
-    let expr = match crate::filter::parse::parse(&query) {
-        Ok(e) => e,
-        Err(e) => {
-            app.filter.error = Some(e.to_string());
-            return;
-        }
-    };
-
-    // Rebuild the serde value from the document root
-    let root_value = raw::rebuild_serde_value(&app.document, app.document.root());
-
-    // Evaluate
-    let results = match crate::filter::eval::eval(&root_value, &expr) {
-        Ok(r) => r,
-        Err(e) => {
-            app.filter.error = Some(e.to_string());
-            return;
-        }
-    };
-
-    // Wrap multiple results in an array; a single result stands on its own.
-    let result_value = if results.len() == 1 {
-        results.into_iter().next().unwrap()
-    } else {
-        serde_json::Value::Array(results)
-    };
-
-    // Build a JsonDocument from the result value.
-    let result_doc = Arc::new(crate::model::node::DocumentBuilder::from_serde_value(
-        result_value,
-        None,
-        0,
-        std::time::Duration::ZERO,
-    ));
-
-    let mut result_view = TreeView::new(Arc::clone(&result_doc));
-    result_view.set_viewport_height(app.last_viewport_height);
-
-    app.filter.result_doc = Some(result_doc);
-    app.filter.result_view = Some(result_view);
-    app.filter.error = None;
-    app.filter.showing_result = true;
-    app.filter.close_input();
-}
-
-fn render_filter_bar(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    filter: &FilterState,
-    theme: &Theme,
-) {
-    let mut spans = vec![Span::styled(
-        " : ",
-        Style::new()
-            .fg(theme.toolbar_active_fg)
-            .bg(theme.toolbar_active_bg)
-            .add_modifier(Modifier::BOLD),
-    )];
-
-    spans.push(Span::styled(
-        filter.query.clone(),
-        Style::new().fg(theme.fg).bg(theme.bg),
-    ));
-    spans.push(Span::styled(
-        "\u{2588}",
-        Style::new().fg(theme.toolbar_active_bg).bg(theme.bg),
-    ));
-
-    if let Some(ref err) = filter.error {
-        spans.push(Span::styled(
-            format!("  \u{26a0} {}", err),
-            Style::new().fg(theme.string.fg.unwrap_or(theme.fg_dim)).bg(theme.bg),
-        ));
-    } else {
-        spans.push(Span::styled(
-            "  [Enter] run  [Esc] cancel",
-            Style::new().fg(theme.fg_dim).bg(theme.bg),
-        ));
-    }
-
-    let line = Line::from(spans);
-    let paragraph = ratatui::widgets::Paragraph::new(line).style(Style::new().bg(theme.bg));
-    frame.render_widget(paragraph, area);
-}
