@@ -106,17 +106,21 @@ fn run_diff_app(
             AppEvent::Mouse(mouse) => {
                 use crossterm::event::MouseEventKind;
                 match mouse.kind {
-                    MouseEventKind::ScrollUp => {
-                        diff_view.handle_key(crossterm::event::KeyEvent::new(
-                            crossterm::event::KeyCode::Up,
+                    MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                        let code = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                            crossterm::event::KeyCode::Up
+                        } else {
+                            crossterm::event::KeyCode::Down
+                        };
+                        let action = diff_view.handle_key(crossterm::event::KeyEvent::new(
+                            code,
                             crossterm::event::KeyModifiers::NONE,
                         ));
-                    }
-                    MouseEventKind::ScrollDown => {
-                        diff_view.handle_key(crossterm::event::KeyEvent::new(
-                            crossterm::event::KeyCode::Down,
-                            crossterm::event::KeyModifiers::NONE,
-                        ));
+                        match action {
+                            ViewAction::Quit => should_quit = true,
+                            ViewAction::ToggleHelp => show_help = !show_help,
+                            _ => {}
+                        }
                     }
                     MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                         if mouse.column >= last_main_area.x

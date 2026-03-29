@@ -532,22 +532,29 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
     let main_area = app.last_main_area;
     let status_area = app.last_status_area;
 
+    /// Dispatch a synthetic key event to the currently visible view,
+    /// routing the returned `ViewAction` through `handle_action`.
+    fn scroll_view(app: &mut App, code: KeyCode) {
+        let key = crossterm::event::KeyEvent::new(code, KeyModifiers::NONE);
+        let action = if app.filter.showing_result {
+            app.filter
+                .result_view
+                .as_mut()
+                .map(|v| v.handle_key(key))
+                .unwrap_or(ViewAction::None)
+        } else {
+            app.active_view_mut().handle_key(key)
+        };
+        handle_action(app, action);
+    }
+
     match mouse.kind {
-        MouseEventKind::ScrollUp => {
-            app.active_view_mut().handle_key(crossterm::event::KeyEvent::new(
-                KeyCode::Up,
-                KeyModifiers::NONE,
-            ));
-        }
-        MouseEventKind::ScrollDown => {
-            app.active_view_mut().handle_key(crossterm::event::KeyEvent::new(
-                KeyCode::Down,
-                KeyModifiers::NONE,
-            ));
-        }
+        MouseEventKind::ScrollUp => scroll_view(app, KeyCode::Up),
+        MouseEventKind::ScrollDown => scroll_view(app, KeyCode::Down),
         MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
             // Breadcrumb click: clicking a path segment in the status bar navigates there.
-            if mouse.row >= status_area.y
+            if !app.filter.showing_result
+                && mouse.row >= status_area.y
                 && mouse.row < status_area.y + status_area.height
                 && mouse.column >= status_area.x
                 && mouse.column < status_area.x + status_area.width
@@ -572,7 +579,13 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 && mouse.row < main_area.y + main_area.height
             {
                 let clicked_row = (mouse.row - main_area.y) as usize;
-                app.click_row(clicked_row);
+                if app.filter.showing_result {
+                    if let Some(ref mut v) = app.filter.result_view {
+                        v.click_row(clicked_row);
+                    }
+                } else {
+                    app.click_row(clicked_row);
+                }
             }
         }
         _ => {}
