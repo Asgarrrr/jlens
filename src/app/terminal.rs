@@ -17,9 +17,14 @@ where
     F: FnOnce(&mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> + UnwindSafe,
 {
     enable_raw_mode()?;
-    stdout()
-        .execute(EnterAlternateScreen)?
-        .execute(EnableMouseCapture)?;
+
+    if let Err(e) = stdout()
+        .execute(EnterAlternateScreen)
+        .and_then(|s| s.execute(EnableMouseCapture))
+    {
+        let _ = disable_raw_mode();
+        return Err(e.into());
+    }
 
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         let backend = CrosstermBackend::new(stdout());
