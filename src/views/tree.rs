@@ -365,7 +365,7 @@ impl TreeView {
                 };
                 spans.push(Span::styled(
                     connector.to_string(),
-                    ratatui::style::Style::new().fg(theme.tree_guide),
+                    theme.tree_guide_style,
                 ));
             }
 
@@ -377,7 +377,7 @@ impl TreeView {
             };
             spans.push(Span::styled(
                 connector.to_string(),
-                ratatui::style::Style::new().fg(theme.tree_guide),
+                theme.tree_guide_style,
             ));
         }
 
@@ -390,7 +390,7 @@ impl TreeView {
             };
             spans.push(Span::styled(
                 icon.to_string(),
-                ratatui::style::Style::new().fg(theme.fg),
+                theme.fg_style,
             ));
         }
 
@@ -399,7 +399,7 @@ impl TreeView {
             spans.push(Span::styled(format!("\"{}\"", key), theme.key));
             spans.push(Span::styled(
                 ": ".to_string(),
-                ratatui::style::Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             ));
         }
 
@@ -407,7 +407,7 @@ impl TreeView {
         if let Some(idx) = row.array_index {
             spans.push(Span::styled(
                 format!("[{}] ", idx),
-                ratatui::style::Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             ));
         }
 
@@ -440,10 +440,7 @@ impl TreeView {
                     } else {
                         format!("{} items", node.value.child_count())
                     };
-                    spans.push(Span::styled(
-                        label,
-                        ratatui::style::Style::new().fg(theme.fg_dim),
-                    ));
+                    spans.push(Span::styled(label, theme.fg_dim_style));
                     spans.push(Span::styled("]".to_string(), theme.bracket));
                 }
             }
@@ -456,10 +453,7 @@ impl TreeView {
                     } else {
                         format!("{} keys", node.value.child_count())
                     };
-                    spans.push(Span::styled(
-                        label,
-                        ratatui::style::Style::new().fg(theme.fg_dim),
-                    ));
+                    spans.push(Span::styled(label, theme.fg_dim_style));
                     spans.push(Span::styled("}".to_string(), theme.bracket));
                 }
             }
@@ -470,9 +464,7 @@ impl TreeView {
         let is_search_match = self.search_matches.contains(&row.node_id);
 
         if is_selected {
-            let sel_style = ratatui::style::Style::new()
-                .bg(theme.selection_bg)
-                .fg(theme.selection_fg);
+            let sel_style = theme.selection_style;
             for span in &mut spans {
                 span.style = span.style.bg(theme.selection_bg);
             }
@@ -505,7 +497,7 @@ impl View for TreeView {
         if self.visible_rows.is_empty() {
             let empty = Line::from(Span::styled(
                 "Empty document",
-                ratatui::style::Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             ));
             frame.render_widget(ratatui::widgets::Paragraph::new(empty), area);
             return;
@@ -523,7 +515,7 @@ impl View for TreeView {
             .collect();
 
         let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(ratatui::style::Style::new().bg(theme.bg));
+            .style(theme.bg_style);
 
         frame.render_widget(paragraph, area);
 

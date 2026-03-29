@@ -1,6 +1,9 @@
 use ratatui::style::{Color, Modifier, Style};
 
 /// Color theme for the JSON viewer.
+///
+/// Composite styles are pre-computed at construction time to avoid
+/// rebuilding `Style` objects on every frame (~10 fps × 50+ calls).
 #[derive(Debug, Clone)]
 pub struct Theme {
     // General
@@ -8,7 +11,6 @@ pub struct Theme {
     pub fg: Color,
     pub fg_dim: Color,
     pub selection_bg: Color,
-    pub selection_fg: Color,
 
     // JSON syntax
     pub key: Style,
@@ -18,116 +20,160 @@ pub struct Theme {
     pub null: Style,
     pub bracket: Style,
 
-    // UI chrome
-    pub toolbar_bg: Color,
-    pub toolbar_fg: Color,
-    pub toolbar_active_bg: Color,
-    pub toolbar_active_fg: Color,
-    pub status_bg: Color,
-    pub status_fg: Color,
-    pub tree_guide: Color,
+    // Pre-computed composite styles
+    pub bg_style: Style,
+    pub fg_style: Style,
+    pub fg_dim_style: Style,
+    pub fg_bold_style: Style,
+    pub selection_style: Style,
+    pub tree_guide_style: Style,
+
+    // Toolbar
+    pub toolbar_bg_style: Style,
+    pub toolbar_brand_style: Style,
+    pub toolbar_active_style: Style,
+    pub toolbar_inactive_style: Style,
+
+    // Status bar
+    pub status_style: Style,
+    pub status_fg_style: Style,
+    pub status_dim_style: Style,
+
+    // Flash
+    pub flash_style: Style,
 
     // Search
     pub search_match: Style,
-    #[allow(dead_code)]
     pub search_current: Style,
-
-    // Flash message
-    pub flash_bg: Color,
-    pub flash_fg: Color,
 
     // Diff
     pub diff_added: Style,
     pub diff_removed: Style,
     pub diff_modified: Style,
+
+    // Scrollbar
+    pub scrollbar_thumb_style: Style,
+    pub scrollbar_track_style: Style,
+
+    // Help overlay
+    pub help_border_style: Style,
+    pub help_title_style: Style,
 }
 
 impl Theme {
     /// Dark theme (Catppuccin Mocha) — default.
     pub fn dark() -> Self {
-        Self {
-            bg: Color::Rgb(22, 22, 30),
-            fg: Color::Rgb(205, 214, 244),
-            fg_dim: Color::Rgb(108, 112, 134),
-            selection_bg: Color::Rgb(49, 50, 68),
-            selection_fg: Color::Rgb(205, 214, 244),
+        let bg = Color::Rgb(22, 22, 30);
+        let fg = Color::Rgb(205, 214, 244);
+        let fg_dim = Color::Rgb(108, 112, 134);
+        let selection_bg = Color::Rgb(49, 50, 68);
+        let toolbar_bg = Color::Rgb(30, 30, 46);
+        let toolbar_fg = Color::Rgb(147, 153, 178);
+        let toolbar_active_bg = Color::Rgb(137, 180, 250);
+        let toolbar_active_fg = Color::Rgb(30, 30, 46);
+        let status_bg = Color::Rgb(30, 30, 46);
+        let status_fg = Color::Rgb(147, 153, 178);
+        let tree_guide = Color::Rgb(88, 91, 112);
+        let flash_bg = Color::Rgb(166, 227, 161);
+        let flash_fg = Color::Rgb(30, 30, 46);
 
-            key: Style::new()
-                .fg(Color::Rgb(137, 180, 250))
-                .add_modifier(Modifier::BOLD),
+        Self {
+            bg, fg, fg_dim, selection_bg,
+
+            key: Style::new().fg(Color::Rgb(137, 180, 250)).add_modifier(Modifier::BOLD),
             string: Style::new().fg(Color::Rgb(166, 227, 161)),
             number: Style::new().fg(Color::Rgb(250, 179, 135)),
             boolean: Style::new().fg(Color::Rgb(203, 166, 247)),
-            null: Style::new().fg(Color::Rgb(108, 112, 134)),
-            bracket: Style::new().fg(Color::Rgb(147, 153, 178)),
+            null: Style::new().fg(fg_dim),
+            bracket: Style::new().fg(toolbar_fg),
 
-            toolbar_bg: Color::Rgb(30, 30, 46),
-            toolbar_fg: Color::Rgb(147, 153, 178),
-            toolbar_active_bg: Color::Rgb(137, 180, 250),
-            toolbar_active_fg: Color::Rgb(30, 30, 46),
-            status_bg: Color::Rgb(30, 30, 46),
-            status_fg: Color::Rgb(147, 153, 178),
-            tree_guide: Color::Rgb(88, 91, 112),
+            bg_style: Style::new().bg(bg),
+            fg_style: Style::new().fg(fg),
+            fg_dim_style: Style::new().fg(fg_dim),
+            fg_bold_style: Style::new().fg(fg).add_modifier(Modifier::BOLD),
+            selection_style: Style::new().fg(fg).bg(selection_bg),
+            tree_guide_style: Style::new().fg(tree_guide),
 
-            search_match: Style::new()
-                .bg(Color::Rgb(249, 226, 175))
-                .fg(Color::Rgb(30, 30, 46)),
-            search_current: Style::new()
-                .bg(Color::Rgb(250, 179, 135))
-                .fg(Color::Rgb(30, 30, 46))
-                .add_modifier(Modifier::BOLD),
+            toolbar_bg_style: Style::new().bg(toolbar_bg),
+            toolbar_brand_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg).add_modifier(Modifier::BOLD),
+            toolbar_active_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg),
+            toolbar_inactive_style: Style::new().fg(toolbar_fg).bg(toolbar_bg),
 
-            flash_bg: Color::Rgb(166, 227, 161),
-            flash_fg: Color::Rgb(30, 30, 46),
+            status_style: Style::new().bg(status_bg),
+            status_fg_style: Style::new().fg(status_fg).bg(status_bg),
+            status_dim_style: Style::new().fg(fg_dim).bg(status_bg),
 
-            // Catppuccin Mocha: green=A6E3A1, red=F38BA8, yellow=F9E2AF
+            flash_style: Style::new().fg(flash_fg).bg(flash_bg),
+
+            search_match: Style::new().bg(Color::Rgb(249, 226, 175)).fg(Color::Rgb(30, 30, 46)),
+            search_current: Style::new().bg(Color::Rgb(250, 179, 135)).fg(Color::Rgb(30, 30, 46)).add_modifier(Modifier::BOLD),
+
             diff_added: Style::new().fg(Color::Rgb(166, 227, 161)),
             diff_removed: Style::new().fg(Color::Rgb(243, 139, 168)),
             diff_modified: Style::new().fg(Color::Rgb(249, 226, 175)),
+
+            scrollbar_thumb_style: Style::new().fg(fg_dim),
+            scrollbar_track_style: Style::new().fg(tree_guide),
+            help_border_style: Style::new().fg(tree_guide),
+            help_title_style: Style::new().fg(toolbar_active_bg).add_modifier(Modifier::BOLD),
         }
     }
 
     /// Light theme (Catppuccin Latte).
     pub fn light() -> Self {
-        Self {
-            bg: Color::Rgb(239, 241, 245),
-            fg: Color::Rgb(76, 79, 105),
-            fg_dim: Color::Rgb(140, 143, 161),
-            selection_bg: Color::Rgb(188, 192, 204),
-            selection_fg: Color::Rgb(76, 79, 105),
+        let bg = Color::Rgb(239, 241, 245);
+        let fg = Color::Rgb(76, 79, 105);
+        let fg_dim = Color::Rgb(140, 143, 161);
+        let selection_bg = Color::Rgb(188, 192, 204);
+        let toolbar_bg = Color::Rgb(220, 224, 232);
+        let toolbar_fg = Color::Rgb(108, 111, 133);
+        let toolbar_active_bg = Color::Rgb(30, 102, 245);
+        let toolbar_active_fg = Color::Rgb(239, 241, 245);
+        let status_bg = Color::Rgb(220, 224, 232);
+        let status_fg = Color::Rgb(108, 111, 133);
+        let tree_guide = Color::Rgb(156, 160, 176);
+        let flash_bg = Color::Rgb(64, 160, 43);
+        let flash_fg = Color::Rgb(239, 241, 245);
 
-            key: Style::new()
-                .fg(Color::Rgb(30, 102, 245))
-                .add_modifier(Modifier::BOLD),
+        Self {
+            bg, fg, fg_dim, selection_bg,
+
+            key: Style::new().fg(Color::Rgb(30, 102, 245)).add_modifier(Modifier::BOLD),
             string: Style::new().fg(Color::Rgb(64, 160, 43)),
             number: Style::new().fg(Color::Rgb(254, 100, 11)),
             boolean: Style::new().fg(Color::Rgb(136, 57, 239)),
-            null: Style::new().fg(Color::Rgb(140, 143, 161)),
-            bracket: Style::new().fg(Color::Rgb(108, 111, 133)),
+            null: Style::new().fg(fg_dim),
+            bracket: Style::new().fg(toolbar_fg),
 
-            toolbar_bg: Color::Rgb(220, 224, 232),
-            toolbar_fg: Color::Rgb(108, 111, 133),
-            toolbar_active_bg: Color::Rgb(30, 102, 245),
-            toolbar_active_fg: Color::Rgb(239, 241, 245),
-            status_bg: Color::Rgb(220, 224, 232),
-            status_fg: Color::Rgb(108, 111, 133),
-            tree_guide: Color::Rgb(156, 160, 176),
+            bg_style: Style::new().bg(bg),
+            fg_style: Style::new().fg(fg),
+            fg_dim_style: Style::new().fg(fg_dim),
+            fg_bold_style: Style::new().fg(fg).add_modifier(Modifier::BOLD),
+            selection_style: Style::new().fg(fg).bg(selection_bg),
+            tree_guide_style: Style::new().fg(tree_guide),
 
-            search_match: Style::new()
-                .bg(Color::Rgb(223, 142, 29))
-                .fg(Color::Rgb(239, 241, 245)),
-            search_current: Style::new()
-                .bg(Color::Rgb(254, 100, 11))
-                .fg(Color::Rgb(239, 241, 245))
-                .add_modifier(Modifier::BOLD),
+            toolbar_bg_style: Style::new().bg(toolbar_bg),
+            toolbar_brand_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg).add_modifier(Modifier::BOLD),
+            toolbar_active_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg),
+            toolbar_inactive_style: Style::new().fg(toolbar_fg).bg(toolbar_bg),
 
-            flash_bg: Color::Rgb(64, 160, 43),
-            flash_fg: Color::Rgb(239, 241, 245),
+            status_style: Style::new().bg(status_bg),
+            status_fg_style: Style::new().fg(status_fg).bg(status_bg),
+            status_dim_style: Style::new().fg(fg_dim).bg(status_bg),
 
-            // Catppuccin Latte: green=40A02B, red=D20F39, yellow=DF8E1D
+            flash_style: Style::new().fg(flash_fg).bg(flash_bg),
+
+            search_match: Style::new().bg(Color::Rgb(223, 142, 29)).fg(Color::Rgb(239, 241, 245)),
+            search_current: Style::new().bg(Color::Rgb(254, 100, 11)).fg(Color::Rgb(239, 241, 245)).add_modifier(Modifier::BOLD),
+
             diff_added: Style::new().fg(Color::Rgb(64, 160, 43)),
             diff_removed: Style::new().fg(Color::Rgb(210, 15, 57)),
             diff_modified: Style::new().fg(Color::Rgb(223, 142, 29)),
+
+            scrollbar_thumb_style: Style::new().fg(fg_dim),
+            scrollbar_track_style: Style::new().fg(tree_guide),
+            help_border_style: Style::new().fg(tree_guide),
+            help_title_style: Style::new().fg(toolbar_active_bg).add_modifier(Modifier::BOLD),
         }
     }
 }

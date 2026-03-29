@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
@@ -184,7 +183,7 @@ impl DiffView {
             DiffStatus::Added => ("+", theme.diff_added),
             DiffStatus::Removed => ("-", theme.diff_removed),
             DiffStatus::Modified => ("~", theme.diff_modified),
-            DiffStatus::Unchanged => (" ", Style::new().fg(theme.fg)),
+            DiffStatus::Unchanged => (" ", theme.fg_style),
         };
 
         spans.push(Span::styled(
@@ -195,7 +194,7 @@ impl DiffView {
         // Expand/collapse icon for containers
         if row.is_container {
             let icon = if row.is_expanded { "▼ " } else { "▶ " };
-            spans.push(Span::styled(icon.to_string(), Style::new().fg(theme.fg)));
+            spans.push(Span::styled(icon.to_string(), theme.fg_style));
         }
 
         // Key label
@@ -206,7 +205,7 @@ impl DiffView {
             ));
             spans.push(Span::styled(
                 ": ".to_string(),
-                Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             ));
         }
 
@@ -214,7 +213,7 @@ impl DiffView {
         if let Some(idx) = row.array_index {
             spans.push(Span::styled(
                 format!("[{}] ", idx),
-                Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             ));
         }
 
@@ -229,7 +228,7 @@ impl DiffView {
                     if !row.is_expanded {
                         spans.push(Span::styled(
                             format!("{} keys", child_count),
-                            Style::new().fg(theme.fg_dim),
+                            theme.fg_dim_style,
                         ));
                         spans.push(Span::styled("}".to_string(), theme.bracket));
                     }
@@ -239,7 +238,7 @@ impl DiffView {
                     if !row.is_expanded {
                         spans.push(Span::styled(
                             format!("{} items", child_count),
-                            Style::new().fg(theme.fg_dim),
+                            theme.fg_dim_style,
                         ));
                         spans.push(Span::styled("]".to_string(), theme.bracket));
                     }
@@ -249,7 +248,7 @@ impl DiffView {
             match row.status {
                 DiffStatus::Unchanged => {
                     if let Some(ref v) = row.right {
-                        spans.push(Span::styled(value_display(v), Style::new().fg(theme.fg)));
+                        spans.push(Span::styled(value_display(v), theme.fg_style));
                     }
                 }
                 DiffStatus::Added => {
@@ -268,7 +267,7 @@ impl DiffView {
                     }
                     spans.push(Span::styled(
                         " → ".to_string(),
-                        Style::new().fg(theme.fg_dim),
+                        theme.fg_dim_style,
                     ));
                     if let Some(ref rv) = row.right {
                         spans.push(Span::styled(value_display(rv), theme.diff_added));
@@ -281,7 +280,7 @@ impl DiffView {
             for span in &mut spans {
                 span.style = span.style.bg(theme.selection_bg);
             }
-            Line::from(spans).style(Style::new().bg(theme.selection_bg).fg(theme.selection_fg))
+            Line::from(spans).style(theme.selection_style)
         } else {
             Line::from(spans)
         }
@@ -298,7 +297,7 @@ impl View for DiffView {
         if self.rows.is_empty() {
             let msg = Line::from(Span::styled(
                 "No differences",
-                Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             ));
             frame.render_widget(ratatui::widgets::Paragraph::new(msg), area);
             return;
@@ -315,7 +314,7 @@ impl View for DiffView {
             .collect();
 
         let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.rows.len() > height {

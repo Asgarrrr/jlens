@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, Row, Table};
 use ratatui::Frame;
@@ -171,9 +170,9 @@ impl View for TableView {
         if let Some(ref msg) = self.fallback_message {
             let paragraph = ratatui::widgets::Paragraph::new(Line::from(Span::styled(
                 msg.clone(),
-                Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             )))
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
             frame.render_widget(paragraph, area);
             return;
         }
@@ -200,15 +199,12 @@ impl View for TableView {
                 };
                 Cell::from(Span::styled(
                     label,
-                    Style::new()
-                        .fg(theme.toolbar_active_fg)
-                        .bg(theme.toolbar_active_bg)
-                        .add_modifier(Modifier::BOLD),
+                    theme.toolbar_brand_style,
                 ))
             })
             .collect();
         let header = Row::new(header_cells)
-            .style(Style::new().bg(theme.toolbar_active_bg))
+            .style(theme.toolbar_active_style)
             .height(1);
 
         let visible_rows = self.scroll.viewport;
@@ -230,14 +226,14 @@ impl View for TableView {
                         } else {
                             text.to_string()
                         };
-                        Cell::from(Span::styled(truncated, Style::new().fg(theme.fg)))
+                        Cell::from(Span::styled(truncated, theme.fg_style))
                     })
                     .collect();
 
                 let style = if is_selected {
-                    Style::new().bg(theme.selection_bg).fg(theme.selection_fg)
+                    theme.selection_style
                 } else {
-                    Style::new().bg(theme.bg)
+                    theme.bg_style
                 };
 
                 Row::new(cells).style(style)
@@ -252,7 +248,7 @@ impl View for TableView {
 
         let table = Table::new(data_rows, widths)
             .header(header)
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
 
         frame.render_widget(table, area);
 

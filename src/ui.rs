@@ -1,11 +1,11 @@
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState};
 use ratatui::Frame;
 
 use crate::model::node::DocumentMetadata;
 use crate::theme::Theme;
+use crate::util::format_count;
 use crate::views::{StatusInfo, ViewMode};
 
 /// Top-level layout: toolbar (1 line) + main view + status bar (1 line).
@@ -43,15 +43,12 @@ pub fn render_toolbar(
 
     spans.push(Span::styled(
         " jlens ",
-        Style::new()
-            .fg(theme.toolbar_active_fg)
-            .bg(theme.toolbar_active_bg)
-            .add_modifier(ratatui::style::Modifier::BOLD),
+        theme.toolbar_brand_style,
     ));
 
     spans.push(Span::styled(
         " ",
-        Style::new().bg(theme.toolbar_bg),
+        theme.toolbar_bg_style,
     ));
 
     for mode in ViewMode::ALL {
@@ -59,25 +56,14 @@ pub fn render_toolbar(
         let label = format!(" {}: {} ", mode.shortcut(), mode.label());
 
         if is_active {
-            spans.push(Span::styled(
-                label,
-                Style::new()
-                    .fg(theme.toolbar_active_fg)
-                    .bg(theme.toolbar_active_bg)
-                    .add_modifier(ratatui::style::Modifier::BOLD),
-            ));
+            spans.push(Span::styled(label, theme.toolbar_active_style));
         } else {
-            spans.push(Span::styled(
-                label,
-                Style::new()
-                    .fg(theme.toolbar_fg)
-                    .bg(theme.toolbar_bg),
-            ));
+            spans.push(Span::styled(label, theme.toolbar_inactive_style));
         }
     }
 
     // Fill remaining width
-    let line = Line::from(spans).style(Style::new().bg(theme.toolbar_bg));
+    let line = Line::from(spans).style(theme.toolbar_bg_style);
     let paragraph = ratatui::widgets::Paragraph::new(line);
     frame.render_widget(paragraph, area);
 }
@@ -93,14 +79,12 @@ pub fn render_status_bar(
 ) {
     // Flash message takes over the entire status bar briefly
     if let Some(msg) = flash_message {
+        use ratatui::style::Modifier;
         let line = Line::from(Span::styled(
             format!(" {} ", msg),
-            Style::new()
-                .fg(theme.flash_fg)
-                .bg(theme.flash_bg)
-                .add_modifier(ratatui::style::Modifier::BOLD),
+            theme.flash_style.add_modifier(Modifier::BOLD),
         ))
-        .style(Style::new().bg(theme.flash_bg));
+        .style(theme.flash_style);
         let paragraph = ratatui::widgets::Paragraph::new(line);
         frame.render_widget(paragraph, area);
         return;
@@ -130,7 +114,7 @@ pub fn render_status_bar(
     if let Some(ref extra) = status.extra {
         spans.push(Span::styled(
             format!(" {} ", extra),
-            Style::new().fg(theme.status_fg).bg(theme.status_bg),
+            theme.status_fg_style,
         ));
     }
 
@@ -142,27 +126,26 @@ pub fn render_status_bar(
 
     spans.push(Span::styled(
         " ".repeat(padding),
-        Style::new().bg(theme.status_bg),
+        theme.status_style,
     ));
 
     // Right: file info
     spans.push(Span::styled(
         format!(" {} ", file_name),
-        Style::new().fg(theme.status_fg).bg(theme.status_bg),
+        theme.status_fg_style,
     ));
     spans.push(Span::styled(
         right,
-        Style::new().fg(theme.fg_dim).bg(theme.status_bg),
+        theme.status_dim_style,
     ));
 
-    let line = Line::from(spans).style(Style::new().bg(theme.status_bg));
+    let line = Line::from(spans).style(theme.status_style);
     let paragraph = ratatui::widgets::Paragraph::new(line);
     frame.render_widget(paragraph, area);
 }
 
 /// Render the help overlay centered in the given area.
 pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
-    use ratatui::style::Modifier;
     use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
     let help_lines: &[(&str, &str)] = &[
@@ -223,9 +206,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
                 // Section header
                 Line::from(Span::styled(
                     format!(" {}", key),
-                    Style::new()
-                        .fg(theme.toolbar_active_bg)
-                        .add_modifier(Modifier::BOLD),
+                    theme.help_title_style,
                 ))
             } else if key.is_empty() {
                 Line::from("")
@@ -233,9 +214,9 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
                 Line::from(vec![
                     Span::styled(
                         format!("  {:<18}", key),
-                        Style::new().fg(theme.fg).add_modifier(Modifier::BOLD),
+                        theme.fg_bold_style,
                     ),
-                    Span::styled(desc.to_string(), Style::new().fg(theme.fg_dim)),
+                    Span::styled(desc.to_string(), theme.fg_dim_style),
                 ])
             }
         })
@@ -244,9 +225,9 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Help ")
-        .title_style(Style::new().fg(theme.toolbar_active_bg).add_modifier(Modifier::BOLD))
-        .border_style(Style::new().fg(theme.tree_guide))
-        .style(Style::new().bg(theme.bg));
+        .title_style(theme.help_title_style)
+        .border_style(theme.help_border_style)
+        .style(theme.bg_style);
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, overlay);
@@ -255,19 +236,22 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
 /// Parse a JSON path (e.g. `$.users[0].name`) into colored breadcrumb spans.
 /// Non-path strings are rendered as plain text with the toolbar style.
 fn breadcrumb_spans(path: &str, theme: &Theme) -> Vec<Span<'static>> {
-    let bg = theme.toolbar_active_bg;
-    let bold = ratatui::style::Modifier::BOLD;
+    use ratatui::style::{Modifier, Style};
+    // Extract raw colors from pre-computed composite styles.
+    let bg = theme.toolbar_active_style.bg.unwrap_or(theme.bg);
+    let toolbar_active_fg = theme.toolbar_active_style.fg.unwrap_or(theme.fg);
+    let sep_fg = theme.toolbar_inactive_style.fg.unwrap_or(theme.fg_dim);
+    let bold = Modifier::BOLD;
 
     if !path.starts_with('$') {
         return vec![Span::styled(
             format!(" {} ", path),
-            Style::new().fg(theme.toolbar_active_fg).bg(bg).add_modifier(bold),
+            theme.toolbar_brand_style,
         )];
     }
 
-    let key_fg = theme.key.fg.unwrap_or(theme.toolbar_active_fg);
-    let idx_fg = theme.number.fg.unwrap_or(theme.toolbar_active_fg);
-    let sep_fg = theme.toolbar_fg;
+    let key_fg = theme.key.fg.unwrap_or(toolbar_active_fg);
+    let idx_fg = theme.number.fg.unwrap_or(toolbar_active_fg);
 
     let mut spans = vec![Span::styled(" ", Style::new().bg(bg))];
     let mut chars = path.chars().peekable();
@@ -311,7 +295,7 @@ fn breadcrumb_spans(path: &str, theme: &Theme) -> Vec<Span<'static>> {
             _ => {
                 spans.push(Span::styled(
                     chars.next().unwrap().to_string(),
-                    Style::new().fg(theme.toolbar_active_fg).bg(bg),
+                    theme.toolbar_active_style,
                 ));
             }
         }
@@ -404,39 +388,8 @@ pub fn render_scrollbar(
         .track_symbol(Some("│"))
         .begin_symbol(None)
         .end_symbol(None)
-        .thumb_style(Style::new().fg(theme.fg_dim))
-        .track_style(Style::new().fg(theme.tree_guide));
+        .thumb_style(theme.scrollbar_thumb_style)
+        .track_style(theme.scrollbar_track_style);
     frame.render_stateful_widget(scrollbar, area, &mut state);
 }
 
-/// Format a number with thousand separators (e.g. 45231 → "45,231").
-fn format_count(n: usize) -> String {
-    let s = n.to_string();
-    let mut result = String::with_capacity(s.len() + s.len() / 3);
-    for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
-            result.push(',');
-        }
-        result.push(c);
-    }
-    result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_count_small() {
-        assert_eq!(format_count(0), "0");
-        assert_eq!(format_count(42), "42");
-        assert_eq!(format_count(999), "999");
-    }
-
-    #[test]
-    fn format_count_thousands() {
-        assert_eq!(format_count(1000), "1,000");
-        assert_eq!(format_count(45231), "45,231");
-        assert_eq!(format_count(1000000), "1,000,000");
-    }
-}

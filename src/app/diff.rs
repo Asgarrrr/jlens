@@ -5,7 +5,6 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 use ratatui::Terminal;
@@ -157,19 +156,14 @@ impl Widget for DiffToolbar<'_> {
         let spans = vec![
             Span::styled(
                 " jlens ",
-                Style::new()
-                    .fg(self.theme.toolbar_active_fg)
-                    .bg(self.theme.toolbar_active_bg)
-                    .add_modifier(Modifier::BOLD),
+                self.theme.toolbar_brand_style,
             ),
             Span::styled(
                 format!("  {} ", self.title),
-                Style::new()
-                    .fg(self.theme.toolbar_fg)
-                    .bg(self.theme.toolbar_bg),
+                self.theme.toolbar_inactive_style,
             ),
         ];
-        let line = Line::from(spans).style(Style::new().bg(self.theme.toolbar_bg));
+        let line = Line::from(spans).style(self.theme.toolbar_bg_style);
         ratatui::widgets::Paragraph::new(line).render(area, buf);
     }
 }
@@ -191,23 +185,18 @@ impl Widget for DiffStatusBar<'_> {
         let spans = vec![
             Span::styled(
                 left,
-                Style::new()
-                    .fg(self.theme.toolbar_active_fg)
-                    .bg(self.theme.toolbar_active_bg)
-                    .add_modifier(Modifier::BOLD),
+                self.theme.toolbar_brand_style,
             ),
             Span::styled(
                 " ".repeat(padding),
-                Style::new().bg(self.theme.status_bg),
+                self.theme.status_style,
             ),
             Span::styled(
                 self.stats_str.to_string(),
-                Style::new()
-                    .fg(self.theme.status_fg)
-                    .bg(self.theme.status_bg),
+                self.theme.status_fg_style,
             ),
         ];
-        let line = Line::from(spans).style(Style::new().bg(self.theme.status_bg));
+        let line = Line::from(spans).style(self.theme.status_style);
         ratatui::widgets::Paragraph::new(line).render(area, buf);
     }
 }

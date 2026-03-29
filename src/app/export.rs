@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
@@ -106,28 +106,25 @@ impl Widget for ExportBar<'_> {
         let spans = vec![
             Span::styled(
                 " Export: ",
-                Style::new()
-                    .fg(theme.toolbar_active_fg)
-                    .bg(theme.toolbar_active_bg)
-                    .add_modifier(Modifier::BOLD),
+                theme.toolbar_brand_style,
             ),
             Span::styled(
                 export.filename.clone(),
-                Style::new().fg(theme.fg).bg(theme.bg),
+                theme.fg_style,
             ),
             Span::styled(
                 "\u{2588}",
-                Style::new().fg(theme.toolbar_active_bg).bg(theme.bg),
+                Style::new().fg(theme.toolbar_active_style.bg.unwrap_or(theme.fg)).bg(theme.bg),
             ),
             Span::styled(
                 "  [Enter] save  [Esc] cancel",
-                Style::new().fg(theme.fg_dim).bg(theme.bg),
+                theme.fg_dim_style,
             ),
         ];
 
         let line = Line::from(spans);
         ratatui::widgets::Paragraph::new(line)
-            .style(Style::new().bg(theme.bg))
+            .style(theme.bg_style)
             .render(area, buf);
     }
 }

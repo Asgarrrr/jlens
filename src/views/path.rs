@@ -47,9 +47,9 @@ impl View for PathView {
         if self.entries.is_empty() {
             let paragraph = ratatui::widgets::Paragraph::new(Line::from(Span::styled(
                 "No leaf values found",
-                Style::new().fg(theme.fg_dim),
+                theme.fg_dim_style,
             )))
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
             frame.render_widget(paragraph, area);
             return;
         }
@@ -66,7 +66,7 @@ impl View for PathView {
                     Span::styled(entry.path.clone(), theme.key),
                     Span::styled(
                         " = ".to_string(),
-                        Style::new().fg(theme.fg_dim),
+                        theme.fg_dim_style,
                     ),
                     Span::styled(
                         entry.value.clone(),
@@ -75,11 +75,7 @@ impl View for PathView {
                 ];
 
                 if is_selected {
-                    Line::from(spans).style(
-                        Style::new()
-                            .bg(theme.selection_bg)
-                            .fg(theme.selection_fg),
-                    )
+                    Line::from(spans).style(theme.selection_style)
                 } else {
                     Line::from(spans)
                 }
@@ -87,7 +83,7 @@ impl View for PathView {
             .collect();
 
         let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.entries.len() > height {

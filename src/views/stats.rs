@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
@@ -65,21 +65,19 @@ impl View for StatsView {
                 let line = match &self.lines[i] {
                     StatsLine::Header(text) => Line::from(Span::styled(
                         format!("  {} ", text),
-                        Style::new()
-                            .fg(theme.toolbar_active_bg)
-                            .add_modifier(Modifier::BOLD),
+                        theme.help_title_style,
                     )),
                     StatsLine::KeyValue(key, value) => Line::from(vec![
                         Span::styled(
                             format!("    {:<24}", key),
-                            Style::new().fg(theme.fg_dim),
+                            theme.fg_dim_style,
                         ),
-                        Span::styled(value.clone(), Style::new().fg(theme.fg)),
+                        Span::styled(value.clone(), theme.fg_style),
                     ]),
                     StatsLine::Bar(label, segments) => {
                         let mut spans = vec![Span::styled(
                             format!("    {:<24}", label),
-                            Style::new().fg(theme.fg_dim),
+                            theme.fg_dim_style,
                         )];
                         let bar_width = width.saturating_sub(28);
                         for (name, ratio, style) in segments {
@@ -99,11 +97,7 @@ impl View for StatsView {
                 };
 
                 if is_selected {
-                    line.style(
-                        Style::new()
-                            .bg(theme.selection_bg)
-                            .fg(theme.selection_fg),
-                    )
+                    line.style(theme.selection_style)
                 } else {
                     line
                 }
@@ -111,7 +105,7 @@ impl View for StatsView {
             .collect();
 
         let paragraph = ratatui::widgets::Paragraph::new(rendered_lines)
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.lines.len() > height {

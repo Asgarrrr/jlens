@@ -150,17 +150,16 @@ impl Widget for SearchBar<'_> {
 
         let mut spans = vec![Span::styled(
             " / ",
-            Style::new()
-                .fg(theme.toolbar_active_fg)
-                .bg(theme.toolbar_active_bg)
-                .add_modifier(Modifier::BOLD),
+            theme.toolbar_brand_style,
         )];
 
+        // toolbar_active_bg is used as a highlight fg in these decorator spans
+        let accent_fg = theme.toolbar_active_style.bg.unwrap_or(theme.fg);
         if search.regex_mode {
             spans.push(Span::styled(
                 "[.*] ",
                 Style::new()
-                    .fg(theme.toolbar_active_bg)
+                    .fg(accent_fg)
                     .bg(theme.bg)
                     .add_modifier(Modifier::BOLD),
             ));
@@ -169,21 +168,21 @@ impl Widget for SearchBar<'_> {
         spans.extend([
             Span::styled(
                 search.query.clone(),
-                Style::new().fg(theme.fg).bg(theme.bg),
+                theme.fg_style,
             ),
             Span::styled(
                 "\u{2588}",
-                Style::new().fg(theme.toolbar_active_bg).bg(theme.bg),
+                Style::new().fg(accent_fg).bg(theme.bg),
             ),
             Span::styled(
                 hit_info,
-                Style::new().fg(theme.fg_dim).bg(theme.bg),
+                theme.fg_dim_style,
             ),
         ]);
 
         let line = Line::from(spans);
         ratatui::widgets::Paragraph::new(line)
-            .style(Style::new().bg(theme.bg))
+            .style(theme.bg_style)
             .render(area, buf);
     }
 }

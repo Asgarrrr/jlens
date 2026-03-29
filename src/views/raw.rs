@@ -1,6 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
@@ -47,18 +46,14 @@ impl View for RawView {
 
                 let mut spans = vec![Span::styled(
                     line_num,
-                    Style::new().fg(theme.fg_dim),
+                    theme.fg_dim_style,
                 )];
 
                 // Simple syntax highlighting by character scanning
                 spans.extend(highlight_json_line(content, theme));
 
                 if is_selected {
-                    Line::from(spans).style(
-                        Style::new()
-                            .bg(theme.selection_bg)
-                            .fg(theme.selection_fg),
-                    )
+                    Line::from(spans).style(theme.selection_style)
                 } else {
                     Line::from(spans)
                 }
@@ -66,7 +61,7 @@ impl View for RawView {
             .collect();
 
         let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(Style::new().bg(theme.bg));
+            .style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.total_lines > height {
@@ -205,7 +200,7 @@ fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
                 if !current.is_empty() {
                     spans.push(Span::styled(
                         std::mem::take(&mut current),
-                        Style::new().fg(theme.fg),
+                        theme.fg_style,
                     ));
                 }
                 // Read quoted string
@@ -244,7 +239,7 @@ fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
                 if !current.is_empty() {
                     spans.push(Span::styled(
                         std::mem::take(&mut current),
-                        Style::new().fg(theme.fg),
+                        theme.fg_style,
                     ));
                 }
                 spans.push(Span::styled(
@@ -256,7 +251,7 @@ fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
                 if !current.is_empty() {
                     spans.push(Span::styled(
                         std::mem::take(&mut current),
-                        Style::new().fg(theme.fg),
+                        theme.fg_style,
                     ));
                 }
                 let mut word = String::new();
@@ -270,14 +265,14 @@ fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
                 if word == "true" || word == "false" {
                     spans.push(Span::styled(word, theme.boolean));
                 } else {
-                    spans.push(Span::styled(word, Style::new().fg(theme.fg)));
+                    spans.push(Span::styled(word, theme.fg_style));
                 }
             }
             'n' => {
                 if !current.is_empty() {
                     spans.push(Span::styled(
                         std::mem::take(&mut current),
-                        Style::new().fg(theme.fg),
+                        theme.fg_style,
                     ));
                 }
                 let mut word = String::new();
@@ -291,14 +286,14 @@ fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
                 if word == "null" {
                     spans.push(Span::styled(word, theme.null));
                 } else {
-                    spans.push(Span::styled(word, Style::new().fg(theme.fg)));
+                    spans.push(Span::styled(word, theme.fg_style));
                 }
             }
             c if c == '-' || c.is_ascii_digit() => {
                 if !current.is_empty() {
                     spans.push(Span::styled(
                         std::mem::take(&mut current),
-                        Style::new().fg(theme.fg),
+                        theme.fg_style,
                     ));
                 }
                 let mut num = String::new();
@@ -319,7 +314,7 @@ fn highlight_json_line<'a>(line: &str, theme: &Theme) -> Vec<Span<'a>> {
     }
 
     if !current.is_empty() {
-        spans.push(Span::styled(current, Style::new().fg(theme.fg)));
+        spans.push(Span::styled(current, theme.fg_style));
     }
 
     spans
