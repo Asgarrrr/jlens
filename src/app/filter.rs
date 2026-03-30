@@ -22,7 +22,9 @@ pub(crate) struct FilterState {
     pub(crate) suggestions: Vec<String>,
     pub(crate) suggestion_idx: usize,
     pub(crate) show_suggestions: bool,
-    pub(crate) live_results: Vec<String>,
+    /// Live tree view built from filter results (updated as user types).
+    pub(crate) live_view: Option<TreeView>,
+    pub(crate) live_doc: Option<Arc<JsonDocument>>,
     pub(crate) live_count: usize,
     pub(crate) live_error: Option<String>,
     /// Filter expression history (persists across open/close).
@@ -53,7 +55,8 @@ impl FilterState {
             suggestions: Vec::new(),
             suggestion_idx: 0,
             show_suggestions: false,
-            live_results: Vec::new(),
+            live_view: None,
+            live_doc: None,
             live_count: 0,
             live_error: None,
             history: Vec::new(),
@@ -69,7 +72,8 @@ impl FilterState {
         self.error = None;
         self.suggestions.clear();
         self.show_suggestions = false;
-        self.live_results.clear();
+        self.live_view = None;
+        self.live_doc = None;
         self.live_count = 0;
         self.live_error = None;
         self.history_idx = None;
@@ -82,7 +86,8 @@ impl FilterState {
         self.cursor = self.query.len();
         self.error = None;
         self.show_suggestions = false;
-        self.live_results.clear();
+        self.live_view = None;
+        self.live_doc = None;
         self.live_count = 0;
         self.live_error = None;
         self.history_idx = None;
@@ -366,15 +371,8 @@ pub(crate) fn render_filter_panel(
     filter: &FilterState,
     area: Rect,
     theme: &Theme,
-    field_names: &[String],
 ) -> u16 {
-    // Calculate how many rows the panel needs
-    let result_rows = if filter.query.trim().is_empty() {
-        8 // examples
-    } else {
-        filter.live_results.len().clamp(1, 10)
-    };
-    let panel_height = (result_rows as u16 + 3).min(area.height / 2); // input + sep + results
+    let panel_height: u16 = 2; // input line + separator
 
     let panel_area = Rect::new(area.x, area.y, area.width, panel_height);
 
@@ -431,30 +429,9 @@ pub(crate) fn render_filter_panel(
         sep_area,
     );
 
-    // Results / examples
-    let results_y = sep_y + 1;
-    let results_h = panel_height.saturating_sub(2);
-    let results_area = Rect::new(panel_area.x, results_y, panel_area.width, results_h);
-
-    let lines: Vec<Line> = if filter.query.trim().is_empty() {
-        render_examples(field_names, theme, results_h as usize)
-    } else if !filter.live_results.is_empty() {
-        filter
-            .live_results
-            .iter()
-            .take(results_h as usize)
-            .map(|s| Line::from(Span::styled(format!("  {s}"), theme.fg_style)))
-            .collect()
-    } else if filter.live_error.is_some() {
-        vec![]
-    } else {
-        vec![Line::from(Span::styled("  (empty)", theme.fg_dim_style))]
-    };
-
-    frame.render_widget(
-        ratatui::widgets::Paragraph::new(lines).style(theme.bg_style),
-        results_area,
-    );
+    // Below the separator: either examples or the live tree view
+    // We return panel_height so the caller knows where the main view starts.
+    // The live tree view is rendered by the caller using filter.live_view.
 
     // Autocomplete popup
     render_suggestions(frame, filter, input_area, theme);
@@ -518,36 +495,6 @@ pub(crate) fn render_suggestions(
 // Suggestion engine
 // ---------------------------------------------------------------------------
 
-fn render_examples(fields: &[String], theme: &Theme, max_lines: usize) -> Vec<Line<'static>> {
-    let sample = fields
-        .iter()
-        .find(|f| f.as_str() != ".")
-        .map(|s| s.as_str())
-        .unwrap_or("name");
-
-    let examples: Vec<(&str, String)> = vec![
-        ("Count", ". | length".into()),
-        ("Values", format!(".[] | .{sample}")),
-        ("Keys", ".[0] | keys".into()),
-        ("Filter", format!(".[] | select(.{sample} != null)")),
-        ("Sort", format!("sort_by(.{sample})")),
-        ("Extract", format!("map(.{sample})")),
-        ("Unique", format!("map(.{sample}) | unique")),
-        ("Slice", ".[0:5]".into()),
-    ];
-
-    examples
-        .into_iter()
-        .take(max_lines)
-        .map(|(desc, expr)| {
-            Line::from(vec![
-                Span::styled(format!("  {desc:<10}"), theme.fg_dim_style),
-                Span::styled(expr, theme.key),
-            ])
-        })
-        .collect()
-}
-
 const BUILTINS: &[&str] = &[
     "length", "keys", "values", "type", "flatten",
     "first", "last", "reverse", "unique", "sort",
@@ -555,33 +502,33 @@ const BUILTINS: &[&str] = &[
     "ascii_downcase", "select", "map", "sort_by",
 ];
 
-/// Compute live preview of filter results.
-/// Caches the serde_json::Value reconstruction to avoid rebuilding on every keystroke.
-pub(crate) fn update_live_preview(
+/// Build a live TreeView from filter results (called on each keystroke).
+pub(crate) fn update_live_view(
     filter: &mut FilterState,
     document: &JsonDocument,
     cached_value: &mut Option<serde_json::Value>,
+    viewport_height: usize,
 ) {
     let query = filter.query.trim();
     if query.is_empty() {
-        filter.live_results.clear();
+        filter.live_view = None;
+        filter.live_doc = None;
         filter.live_count = 0;
         filter.live_error = None;
         return;
     }
 
-    // Parse first — cheap. If it fails, show error without touching the cache.
     let expr = match crate::filter::parse::parse(query) {
         Ok(e) => e,
         Err(e) => {
             filter.live_error = Some(e.to_string());
-            filter.live_results.clear();
+            filter.live_view = None;
+            filter.live_doc = None;
             filter.live_count = 0;
             return;
         }
     };
 
-    // Rebuild serde_json::Value only once (cached across keystrokes).
     let root_value = cached_value
         .get_or_insert_with(|| raw::rebuild_serde_value(document, document.root()));
 
@@ -589,22 +536,31 @@ pub(crate) fn update_live_preview(
         Ok(results) => {
             filter.live_count = results.len();
             filter.live_error = None;
-            filter.live_results = results
-                .iter()
-                .take(20)
-                .map(|v| {
-                    let s = serde_json::to_string(v).unwrap_or_default();
-                    if s.len() > 120 {
-                        format!("{}...", crate::util::truncate_chars(&s, 117))
-                    } else {
-                        s
-                    }
-                })
-                .collect();
+
+            if results.is_empty() {
+                filter.live_view = None;
+                filter.live_doc = None;
+                return;
+            }
+
+            let result_value = if results.len() == 1 {
+                results.into_iter().next().unwrap()
+            } else {
+                serde_json::Value::Array(results)
+            };
+
+            let doc = Arc::new(DocumentBuilder::from_serde_value(
+                result_value, None, 0, Duration::ZERO,
+            ));
+            let mut view = TreeView::new(Arc::clone(&doc));
+            view.set_viewport_height(viewport_height);
+            filter.live_doc = Some(doc);
+            filter.live_view = Some(view);
         }
         Err(e) => {
             filter.live_error = Some(e.to_string());
-            filter.live_results.clear();
+            filter.live_view = None;
+            filter.live_doc = None;
             filter.live_count = 0;
         }
     }
