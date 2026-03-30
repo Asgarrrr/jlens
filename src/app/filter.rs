@@ -359,38 +359,27 @@ pub(crate) fn run_filter(
 // Widget
 // ---------------------------------------------------------------------------
 
-/// Render the filter as a centered overlay with live results.
-pub(crate) fn render_filter_overlay(
+/// Render the filter panel inline (takes space from the top of the main area).
+/// Returns the Rect consumed so the caller can shrink the main view.
+pub(crate) fn render_filter_panel(
     frame: &mut ratatui::Frame,
     filter: &FilterState,
+    area: Rect,
     theme: &Theme,
     field_names: &[String],
-) {
-    let screen = frame.area();
-    // Size to content: input + separator + results (max 12) + footer = ~16 rows
-    let content_rows = if filter.query.trim().is_empty() { 12 } else { filter.live_results.len().clamp(1, 15) + 1 };
-    let h = (content_rows as u16 + 4).clamp(8, screen.height.saturating_sub(4));
-    let w = (screen.width * 70 / 100).clamp(50, screen.width.saturating_sub(4));
-    let x = (screen.width - w) / 2;
-    let y = (screen.height - h) / 2;
-    let overlay = Rect::new(x, y, w, h);
+) -> u16 {
+    // Calculate how many rows the panel needs
+    let result_rows = if filter.query.trim().is_empty() {
+        8 // examples
+    } else {
+        filter.live_results.len().clamp(1, 10)
+    };
+    let panel_height = (result_rows as u16 + 3).min(area.height / 2); // input + sep + results
 
-    frame.render_widget(ratatui::widgets::Clear, overlay);
+    let panel_area = Rect::new(area.x, area.y, area.width, panel_height);
 
-    let block = ratatui::widgets::Block::bordered()
-        .title(" Filter ")
-        .title_style(theme.toolbar_brand_style)
-        .border_style(theme.toolbar_active_style)
-        .style(theme.bg_style);
-    let inner = block.inner(overlay);
-    frame.render_widget(block, overlay);
-
-    if inner.height < 4 {
-        return;
-    }
-
-    // Input line with cursor at correct position
-    let input_area = Rect::new(inner.x, inner.y, inner.width, 1);
+    // Input line
+    let input_area = Rect::new(panel_area.x, panel_area.y, panel_area.width, 1);
     let (before_cursor, after_cursor) = filter.query.split_at(filter.cursor);
     let mut input_spans = vec![
         Span::styled(" \u{276f} ", theme.toolbar_brand_style),
@@ -404,6 +393,11 @@ pub(crate) fn render_filter_overlay(
             "  [Tab] accept  [\u{2191}\u{2193}] nav",
             theme.fg_dim_style,
         ));
+    } else {
+        input_spans.push(Span::styled(
+            "  [Enter] apply  [Tab] suggest  [Esc] cancel",
+            theme.fg_dim_style,
+        ));
     }
 
     frame.render_widget(
@@ -412,7 +406,9 @@ pub(crate) fn render_filter_overlay(
     );
 
     // Separator with label
-    let sep_area = Rect::new(inner.x, inner.y + 1, inner.width, 1);
+    let sep_y = panel_area.y + 1;
+    let sep_area = Rect::new(panel_area.x, sep_y, panel_area.width, 1);
+
     let (sep_label, sep_style) = if let Some(ref err) = filter.live_error {
         (format!(" \u{26a0} {err} "), theme.error_style)
     } else if filter.live_count > 0 {
@@ -424,32 +420,29 @@ pub(crate) fn render_filter_overlay(
         (" No results ".into(), theme.fg_dim_style)
     };
 
-    // Draw: ─── label ──────
-    let label_width = sep_label.len();
-    let remaining = (inner.width as usize).saturating_sub(label_width + 2);
-    let rule_right = "\u{2500}".repeat(remaining);
-    let sep_line = Line::from(vec![
-        Span::styled("\u{2500}\u{2500}", theme.tree_guide_style),
-        Span::styled(sep_label, sep_style),
-        Span::styled(rule_right, theme.tree_guide_style),
-    ]);
-
+    let remaining = (panel_area.width as usize).saturating_sub(sep_label.len() + 2);
     frame.render_widget(
-        ratatui::widgets::Paragraph::new(sep_line).style(theme.bg_style),
+        ratatui::widgets::Paragraph::new(Line::from(vec![
+            Span::styled("\u{2500}\u{2500}", theme.tree_guide_style),
+            Span::styled(sep_label, sep_style),
+            Span::styled("\u{2500}".repeat(remaining), theme.tree_guide_style),
+        ]))
+        .style(theme.bg_style),
         sep_area,
     );
 
-    // Results area
-    let results_area = Rect::new(inner.x, inner.y + 2, inner.width, inner.height.saturating_sub(3));
+    // Results / examples
+    let results_y = sep_y + 1;
+    let results_h = panel_height.saturating_sub(2);
+    let results_area = Rect::new(panel_area.x, results_y, panel_area.width, results_h);
 
     let lines: Vec<Line> = if filter.query.trim().is_empty() {
-        // Show contextual examples when empty
-        render_examples(field_names, theme, results_area.height as usize)
+        render_examples(field_names, theme, results_h as usize)
     } else if !filter.live_results.is_empty() {
         filter
             .live_results
             .iter()
-            .take(results_area.height as usize)
+            .take(results_h as usize)
             .map(|s| Line::from(Span::styled(format!("  {s}"), theme.fg_style)))
             .collect()
     } else if filter.live_error.is_some() {
@@ -463,19 +456,10 @@ pub(crate) fn render_filter_overlay(
         results_area,
     );
 
-    // Footer hints
-    let footer_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
-    frame.render_widget(
-        ratatui::widgets::Paragraph::new(Line::from(Span::styled(
-            " [Enter] apply  [Tab] suggest  [Esc] cancel",
-            theme.fg_dim_style,
-        )))
-        .style(theme.bg_style),
-        footer_area,
-    );
-
-    // Autocomplete popup on top
+    // Autocomplete popup
     render_suggestions(frame, filter, input_area, theme);
+
+    panel_height
 }
 
 // ---------------------------------------------------------------------------

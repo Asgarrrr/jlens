@@ -510,15 +510,26 @@ fn run_app(
                 let inner = block.inner(main_area);
                 frame.render_widget(block, main_area);
 
-                app.last_main_area = inner;
-                app.update_viewport_height(inner.height as usize);
+                // If filter is active, render filter panel at top, view below
+                let view_area = if app.filter.active {
+                    let fields = app.filter_fields_cache.as_deref().unwrap_or(&[]);
+                    let used = filter::render_filter_panel(
+                        frame, &app.filter, inner, &app.theme, fields,
+                    );
+                    Rect::new(inner.x, inner.y + used, inner.width, inner.height.saturating_sub(used))
+                } else {
+                    inner
+                };
+
+                app.last_main_area = view_area;
+                app.update_viewport_height(view_area.height as usize);
 
                 if app.filter.showing_result {
                     if let Some(ref result_view) = app.filter.result_view {
-                        result_view.render(frame, inner, &app.theme);
+                        result_view.render(frame, view_area, &app.theme);
                     }
                 } else {
-                    app.active_view().render(frame, inner, &app.theme);
+                    app.active_view().render(frame, view_area, &app.theme);
                 }
 
                 // Bottom bar: search or export
@@ -594,11 +605,7 @@ fn run_app(
                     .or(filter_indicator.as_deref());
                 ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
 
-                // Overlays (rendered last, in z-order)
-                if app.filter.active {
-                    let fields = app.filter_fields_cache.as_deref().unwrap_or(&[]);
-                    filter::render_filter_overlay(frame, &app.filter, &app.theme, fields);
-                }
+                // (filter overlay removed — now rendered inline above main view)
 
                 if app.show_help {
                     ui::render_help_overlay(frame, frame.area(), &app.theme);
