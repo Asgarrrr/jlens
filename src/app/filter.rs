@@ -112,7 +112,7 @@ pub(crate) fn run_filter(
     let root_value = raw::rebuild_serde_value(document, document.root());
 
     // Evaluate
-    let results = match crate::filter::eval::eval(&root_value, &expr) {
+    let results = match crate::filter::eval::apply(&root_value, &expr) {
         Ok(r) => r,
         Err(e) => {
             filter.error = Some(e.to_string());
