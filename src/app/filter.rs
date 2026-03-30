@@ -306,8 +306,10 @@ impl FilterState {
         let prefix_start = self.cursor - prefix.len();
         self.query.replace_range(prefix_start..self.cursor, &suggestion);
         self.cursor = prefix_start + suggestion.len();
-        self.show_suggestions = false;
         self.suggestion_idx = 0;
+        // Keep suggestions open if the accepted suggestion ends with something
+        // that naturally leads to more input (like a field name → might chain with .)
+        self.show_suggestions = false;
     }
 
     pub(crate) fn handle_result_key(&mut self, key: KeyEvent) -> FilterAction {
@@ -416,22 +418,27 @@ pub(crate) fn render_filter_input(
         crate::util::display_width(before) + crate::util::display_width(after),
     );
 
-    let spans = vec![
-        Span::styled(prompt, theme.toolbar_brand_style),
-        Span::styled(before, theme.fg_style),
-        Span::styled(after, theme.fg_style),
-        Span::raw(" ".repeat(padding)),
-        Span::styled(right, right_style),
-        Span::raw(" "),
-    ];
+    let mut spans = vec![Span::styled(prompt, theme.toolbar_brand_style)];
 
+    if filter.query.is_empty() {
+        spans.push(Span::styled(". | keys", theme.tree_guide_style));
+    } else {
+        spans.push(Span::styled(before, theme.fg_style));
+        spans.push(Span::styled(after, theme.fg_style));
+    }
+
+    spans.push(Span::raw(" ".repeat(padding)));
+    spans.push(Span::styled(right, right_style));
+    spans.push(Span::raw(" "));
+
+    // Distinct background for filter mode
     frame.render_widget(
-        ratatui::widgets::Paragraph::new(Line::from(spans)).style(theme.bg_style),
+        ratatui::widgets::Paragraph::new(Line::from(spans)).style(theme.toolbar_bg_style),
         area,
     );
 
     // Terminal cursor
-    let cursor_x = area.x + prompt_width + crate::util::display_width(before) as u16;
+    let cursor_x = area.x + prompt_width + if filter.query.is_empty() { 0 } else { crate::util::display_width(before) as u16 };
     frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, area.y));
 }
 
@@ -482,12 +489,14 @@ fn render_suggestions(
         .take(max_shown)
         .enumerate()
         .map(|(i, s)| {
-            let style = if i == filter.suggestion_idx {
-                theme.selection_style
-            } else {
-                theme.bg_style
-            };
-            Line::from(Span::styled(format!(" {s} "), style))
+            let is_sel = i == filter.suggestion_idx;
+            let bg = if is_sel { theme.selection_style } else { theme.bg_style };
+            let is_builtin = BUILTINS.contains(&s.as_str());
+            let icon = if is_builtin { "\u{0192}" } else { "\u{25cb}" }; // ƒ for builtins, ○ for fields
+            Line::from(vec![
+                Span::styled(format!(" {icon} "), if is_builtin { theme.boolean } else { theme.key }),
+                Span::styled(format!("{s} "), bg),
+            ]).style(bg)
         })
         .collect();
 
