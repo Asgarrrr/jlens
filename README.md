@@ -26,6 +26,19 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 .values | flatten           # flatten arrays
 ```
 
+**Zoom mode** (`z`/`Z`) — zoom into any container node. It becomes the root. All views reflect the subtree. Stack-based: zoom → zoom → pop → pop.
+
+**Adaptive preview pane** (`p`) — toggle a bottom panel that auto-detects content:
+- Array of numbers → sparkline chart with min/max/avg
+- Array of objects → auto-table preview (first 10 rows)
+- Array of strings → scrollable list
+- String → detect URL, ISO date, base64, embedded JSON
+- Object → key summary with types
+
+Resize with `+`/`-`.
+
+**Fuzzy path finder** (`@`) — telescope-style overlay. Type to fuzzy-search all paths in the document. Jump to any node instantly. Scores consecutive matches, word boundaries, and path separators.
+
 **Structural diff** (`--diff`) — compare two JSON files side-by-side with added/removed/modified highlighting and full-row background tinting
 
 **Export** (`Ctrl+S`) — export the selected subtree or full document to a file
@@ -37,9 +50,10 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 | File size | Parse time |
 |-----------|-----------|
 | 1 KB | <1ms |
-| 1 MB | 8ms |
-| 10 MB | 83ms |
-| 100 MB | 1.3s |
+| 1 MB | 3ms |
+| 10 MB | 3ms |
+| 100 MB | 3ms |
+| 1 GB | 2ms |
 
 - 30fps rendering with dirty-flag optimization (zero CPU when idle)
 - Zero-allocation syntax highlighting (borrowed slices, no per-frame heap allocs)
@@ -110,6 +124,11 @@ jlens a.json --diff b.json             # structural diff
 | `/` / `Ctrl+F` | Search |
 | `n` / `N` | Next/previous match |
 | `:` | Filter |
+| `@` | Fuzzy path finder |
+| `z` | Zoom into selected node |
+| `Z` | Zoom out (pop) |
+| `p` | Toggle preview pane |
+| `+` / `-` | Resize preview pane |
 | `y` | Copy value |
 | `Y` | Copy path |
 | `Ctrl+S` | Export |
@@ -148,6 +167,9 @@ src/
     filter.rs         Filter state + bar widget
   keymap.rs           Action enum + key-to-action mapping
   event.rs            Terminal event polling
+  preview.rs          Adaptive preview pane (sparkline, table, string detection)
+  finder.rs           Fuzzy path finder overlay
+  config.rs           TOML config loading
   model/
     node.rs           Arena-based JSON document model
     lazy.rs           Mmap-backed lazy loading with shallow parse
