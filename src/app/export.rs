@@ -36,7 +36,9 @@ impl ExportState {
                 self.filename.pop();
                 ExportAction::None
             }
-            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+            (mods, KeyCode::Char(c))
+                if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
                 self.filename.push(c);
                 ExportAction::None
             }

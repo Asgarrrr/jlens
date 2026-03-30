@@ -69,7 +69,9 @@ impl FilterState {
                 self.error = None;
                 FilterAction::None
             }
-            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+            (mods, KeyCode::Char(c))
+                if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
                 self.query.push(c);
                 self.error = None;
                 FilterAction::None

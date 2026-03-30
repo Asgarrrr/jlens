@@ -98,7 +98,9 @@ impl SearchState {
                 self.mark_dirty();
                 SearchAction::QueryChanged
             }
-            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+            (mods, KeyCode::Char(c))
+                if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
                 self.query.push(c);
                 self.mark_dirty();
                 SearchAction::QueryChanged
