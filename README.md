@@ -6,44 +6,46 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 
 ## Features
 
-**5 view modes** switchable with `1`-`5`:
+**6 view modes** — switch with `1`-`6` or the view menu (`v`):
 
 - **Tree** — collapsible tree with syntax highlighting, vim navigation, search highlighting
 - **Table** — auto-detected array-of-objects as sortable columns with zebra striping
 - **Raw** — pretty-printed JSON with line numbers and syntax highlighting
 - **Paths** — every leaf value with its full JSON path
 - **Stats** — document overview, type distribution, depth analysis
+- **Schema** — inferred structure with types, presence percentages, and mixed-type detection
 
 **Search** (`/`) — incremental regex-capable search with match highlighting and navigation
 
-**Filter** (`:`) — jq-like expression language:
+**Filter** (`:`) — jq-like expression language with live preview, autocomplete, and history:
 ```
-.users                     # field access
-.[0]                       # index
-.items[]                   # iterate
-.data | keys               # pipe to builtin
-.data | length             # count elements
-.values | flatten           # flatten arrays
+.users[] | select(.age >= 30)       # filter by predicate
+.items | map(.price * .qty)          # transform values
+sort_by(.timestamp)                  # sort
+.data | select(.name == "Alice")     # string comparison
+(.a + .b) * 2                        # arithmetic
+map(.category) | unique              # deduplicate
+. | length                           # count
+.[0] | keys                          # inspect structure
 ```
 
-**Zoom mode** (`z`/`Z`) — zoom into any container node. It becomes the root. All views reflect the subtree. Stack-based: zoom → zoom → pop → pop.
+Supports: `select`, `map`, `sort_by`, comparisons (`==`, `!=`, `>`, `<`, `>=`, `<=`), boolean logic (`and`, `or`, `not`), arithmetic (`+`, `-`, `*`, `/`), and 16 builtins (`length`, `keys`, `values`, `type`, `flatten`, `first`, `last`, `reverse`, `unique`, `sort`, `min`, `max`, `not`, `to_number`, `to_string`, `ascii_downcase`).
 
-**Adaptive preview pane** (`p`) — toggle a side panel that auto-detects content:
-- Array of numbers → sparkline chart with min/max/avg
-- Array of objects → auto-table preview (first 10 rows)
-- Array of strings → scrollable list
+**Zoom mode** (`z`/`Z`) — zoom into any container node. It becomes the root. All views reflect the subtree.
+
+**Preview pane** (`p`) — toggle a side panel that auto-detects content:
+- Array of numbers → sparkline chart
+- Array of objects → table preview
 - String → detect URL, ISO date, embedded JSON
 - Object → key summary with types
 
-Resize with `+`/`-`.
+**Fuzzy path finder** (`@`) — telescope-style overlay to jump to any node instantly.
 
-**Fuzzy path finder** (`@`) — telescope-style overlay. Type to fuzzy-search all paths in the document. Jump to any node instantly. Scores consecutive matches, word boundaries, and path separators.
+**Structural diff** (`--diff`) — compare two JSON files with added/removed/modified highlighting.
 
-**Structural diff** (`--diff`) — compare two JSON files side-by-side with added/removed/modified highlighting and full-row background tinting
+**Export** (`Ctrl+S`) — export the selected subtree or full document to a file.
 
-**Export** (`Ctrl+S`) — export the selected subtree or full document to a file
-
-**Lazy loading** — all files are shallow-parsed via mmap with progressive expansion on demand.
+**Lazy loading** — all files use mmap-backed progressive parsing. No file size limit.
 
 ## Performance
 
@@ -55,25 +57,10 @@ Resize with `+`/`-`.
 | 100 MB | 3ms |
 | 1 GB | 2ms |
 
-- 30fps rendering with dirty-flag optimization (zero CPU when idle)
-- Zero-allocation syntax highlighting (borrowed slices, no per-frame heap allocs)
-- Pre-computed theme styles (no `Style::new()` chains in render paths)
-- Single-string RawView with byte offsets (no per-line heap allocations)
-- Arena-based document model with append-only lazy expansion
-
 ## Install
 
 ```sh
 cargo install --path .
-```
-
-Or build from source:
-
-```sh
-git clone https://github.com/Asgarrrr/jlens
-cd jlens
-cargo build --release
-./target/release/jlens your_file.json
 ```
 
 ## Usage
@@ -83,6 +70,7 @@ jlens data.json                        # open file
 jlens -                                # read from stdin
 cat data.json | jlens                  # pipe
 jlens a.json --diff b.json             # structural diff
+jlens --init                            # generate config file
 ```
 
 ## Keybindings
@@ -95,10 +83,19 @@ jlens a.json --diff b.json             # structural diff
 | `k` / `Up` | Move up |
 | `Ctrl+D` / `PageDown` | Page down |
 | `Ctrl+U` / `PageUp` | Page up |
-| `Home` | Go to top |
+| `Home` / `Ctrl+A` | Go to top |
 | `G` / `End` | Go to bottom |
 
-### Tree view
+### Views
+
+| Key | Action |
+|-----|--------|
+| `1`-`6` | Switch view (Tree, Table, Raw, Paths, Stats, Schema) |
+| `v` | View selector menu |
+| `p` | Toggle preview pane |
+| `+` / `-` | Resize preview |
+
+### Tree
 
 | Key | Action |
 |-----|--------|
@@ -107,92 +104,71 @@ jlens a.json --diff b.json             # structural diff
 | `h` / `Left` | Collapse node |
 | `e` | Expand all |
 | `E` | Collapse all |
+| `z` | Zoom in |
+| `Z` | Zoom out |
 
-### Table view
+### Filter (`:`)
 
 | Key | Action |
 |-----|--------|
-| `Tab` | Next column |
-| `Shift+Tab` | Previous column |
-| `s` | Toggle sort direction |
+| `Tab` | Switch focus (tree / filter) |
+| `Enter` | Apply filter |
+| `Esc` | Close filter |
+| `Up` / `Down` | History / suggestions |
+| `Left` / `Right` | Move cursor |
+| `Ctrl+W` | Delete word |
+| `Ctrl+U` | Clear line |
 
 ### Global
 
 | Key | Action |
 |-----|--------|
-| `1`-`5` | Switch view mode |
 | `/` / `Ctrl+F` | Search |
-| `n` / `N` | Next/previous match |
 | `:` | Filter |
 | `@` | Fuzzy path finder |
-| `z` | Zoom into selected node |
-| `Z` | Zoom out (pop) |
-| `p` | Toggle preview pane |
-| `+` / `-` | Resize preview pane |
 | `y` | Copy value |
 | `Y` | Copy path |
 | `Ctrl+S` | Export |
 | `?` | Help |
 | `q` / `Ctrl+C` | Quit |
 
-### Search bar
+## Configuration
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+R` | Toggle regex mode |
-| `Ctrl+N` / `Down` | Next match |
-| `Ctrl+P` / `Up` | Previous match |
-| `Enter` | Confirm and close |
-| `Esc` | Cancel |
+Generate a default config:
+
+```sh
+jlens --init
+```
+
+Config location: `~/.config/jlens/config.toml` (Linux) or `~/Library/Application Support/jlens/config.toml` (macOS).
+
+```toml
+[general]
+default_view = "tree"
+tick_rate_ms = 33
+
+[search]
+regex = false
+
+[keybindings]
+# quit = "q"
+# search = "/"
+
+[theme]
+base = "dark"
+
+[theme.overrides]
+# bg = "#1e1e2e"
+# fg = "#cdd6f4"
+```
 
 ## Themes
 
-Built-in Catppuccin Mocha (dark) and Latte (light) themes:
+Built-in Catppuccin Mocha (dark) and Latte (light):
 
 ```sh
 jlens --theme dark data.json
 jlens --theme light data.json
-```
-
-## Architecture
-
-```
-src/
-  app.rs              App struct, event loop, view dispatch
-  app/
-    terminal.rs       Terminal lifecycle (raw mode, panic recovery)
-    diff.rs           Diff mode TUI
-    search.rs         Search state machine + bar widget
-    export.rs         Export state + bar widget
-    filter.rs         Filter state + bar widget
-  keymap.rs           Action enum + key-to-action mapping
-  event.rs            Terminal event polling
-  config.rs           TOML config loading
-  preview.rs          Adaptive preview pane (sparkline, table, string detection)
-  finder.rs           Fuzzy path finder overlay
-  model/
-    node.rs           Arena-based JSON document model
-    lazy.rs           Mmap-backed lazy loading with shallow parse
-  parser/
-    detect.rs         Auto-detect parse strategy by file size
-    scan.rs           Byte-level JSON scanner
-    streaming.rs      Mmap-backed lazy parse
-  views/
-    tree.rs           Collapsible tree view
-    table.rs          Auto-detected table view
-    raw.rs            Syntax-highlighted raw JSON
-    path.rs           Leaf paths view
-    stats.rs          Document statistics
-  diff/
-    algo.rs           Structural diff algorithm
-    view.rs           Diff tree view
-  filter/
-    parse.rs          Expression parser
-    eval.rs           Expression evaluator
-  search.rs           Full-text + regex search
-  theme.rs            Catppuccin color themes
-  ui.rs               Layout, toolbar, status bar, help overlay
-  util.rs             Scroll state, display width, formatting
 ```
 
 ## License
