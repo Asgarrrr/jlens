@@ -258,9 +258,8 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
 pub fn run_stdin(theme: Theme) -> Result<()> {
     use std::io::{Read, Write};
 
-    const SPINNER: &[u8] = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".as_bytes();
-    const SPINNER_CHARS: usize = 10;
-    const PROGRESS_INTERVAL: usize = 256 * 1024; // update every 256KB
+    const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    const PROGRESS_INTERVAL: usize = 256 * 1024;
 
     let mut buf = Vec::new();
     let mut chunk = [0u8; 64 * 1024];
@@ -276,13 +275,9 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
                 total += n;
                 if total - last_progress >= PROGRESS_INTERVAL {
                     last_progress = total;
-                    // Each braille char is 3 bytes UTF-8
-                    let idx = (total / PROGRESS_INTERVAL) % SPINNER_CHARS;
-                    let spin = &SPINNER[idx * 3..(idx + 1) * 3];
+                    let spin = SPINNER[(total / PROGRESS_INTERVAL) % SPINNER.len()];
                     let mut err = stderr.lock();
-                    let _ = write!(err, "\r\x1b[2m");
-                    let _ = err.write_all(spin);
-                    let _ = write!(err, " Reading stdin... ");
+                    let _ = write!(err, "\r\x1b[2m{spin} Reading stdin... ");
                     write_bytes_human(&mut err, total);
                     let _ = write!(err, "\x1b[0m");
                 }
@@ -318,27 +313,26 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
 }
 
 /// Try parsing input as JSON Lines (one JSON value per line).
-/// Quick-checks the first non-empty line before committing to a full parse.
 fn try_json_lines(text: &str) -> Option<serde_json::Value> {
-    let first = text.lines().find(|l| !l.trim().is_empty())?;
-    let first_trimmed = first.trim();
-    // JSON Lines entries are typically objects or arrays
-    if !(first_trimmed.starts_with('{') || first_trimmed.starts_with('[')) {
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
+
+    // Quick-check: first line must start with { or [ and parse independently.
+    let first = lines.next()?;
+    if !(first.starts_with('{') || first.starts_with('[')) {
         return None;
     }
-    // Verify the first line parses independently — if not, this isn't JSONL
-    serde_json::from_str::<serde_json::Value>(first_trimmed).ok()?;
+    let first_val: serde_json::Value = serde_json::from_str(first).ok()?;
 
-    let values: Result<Vec<_>, _> = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .map(serde_json::from_str)
-        .collect();
+    // Parse remaining lines, prepending the already-parsed first value.
+    let mut values = vec![first_val];
+    for line in lines {
+        values.push(serde_json::from_str(line).ok()?);
+    }
 
-    match values {
-        Ok(v) if v.len() >= 2 => Some(serde_json::Value::Array(v)),
-        _ => None,
+    if values.len() >= 2 {
+        Some(serde_json::Value::Array(values))
+    } else {
+        None
     }
 }
 
