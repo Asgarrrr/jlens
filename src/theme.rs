@@ -50,6 +50,21 @@ pub struct Theme {
     pub diff_added: Style,
     pub diff_removed: Style,
     pub diff_modified: Style,
+    pub diff_added_bg: Style,
+    pub diff_removed_bg: Style,
+    pub diff_modified_bg: Style,
+
+    // Semantic
+    pub error_style: Style,
+    pub warning_style: Style,
+    pub success_style: Style,
+
+    // Selection
+    pub selected_indicator_style: Style,
+    pub alt_row_bg: Style,
+
+    // Tree
+    pub tree_icon_style: Style,
 
     // Scrollbar
     pub scrollbar_thumb_style: Style,
@@ -111,6 +126,17 @@ impl Theme {
             diff_added: Style::new().fg(Color::Rgb(166, 227, 161)),
             diff_removed: Style::new().fg(Color::Rgb(243, 139, 168)),
             diff_modified: Style::new().fg(Color::Rgb(249, 226, 175)),
+            diff_added_bg: Style::new().bg(Color::Rgb(22, 38, 28)),
+            diff_removed_bg: Style::new().bg(Color::Rgb(42, 22, 28)),
+            diff_modified_bg: Style::new().bg(Color::Rgb(42, 38, 22)),
+
+            error_style: Style::new().fg(Color::Rgb(243, 139, 168)),
+            warning_style: Style::new().fg(Color::Rgb(249, 226, 175)),
+            success_style: Style::new().fg(Color::Rgb(166, 227, 161)),
+
+            selected_indicator_style: Style::new().fg(toolbar_active_bg),
+            alt_row_bg: Style::new().bg(Color::Rgb(26, 26, 36)),
+            tree_icon_style: Style::new().fg(toolbar_active_bg),
 
             scrollbar_thumb_style: Style::new().fg(fg_dim),
             scrollbar_track_style: Style::new().fg(tree_guide),
@@ -169,6 +195,17 @@ impl Theme {
             diff_added: Style::new().fg(Color::Rgb(64, 160, 43)),
             diff_removed: Style::new().fg(Color::Rgb(210, 15, 57)),
             diff_modified: Style::new().fg(Color::Rgb(223, 142, 29)),
+            diff_added_bg: Style::new().bg(Color::Rgb(226, 243, 222)),
+            diff_removed_bg: Style::new().bg(Color::Rgb(248, 218, 224)),
+            diff_modified_bg: Style::new().bg(Color::Rgb(248, 238, 212)),
+
+            error_style: Style::new().fg(Color::Rgb(210, 15, 57)),
+            warning_style: Style::new().fg(Color::Rgb(223, 142, 29)),
+            success_style: Style::new().fg(Color::Rgb(64, 160, 43)),
+
+            selected_indicator_style: Style::new().fg(toolbar_active_bg),
+            alt_row_bg: Style::new().bg(Color::Rgb(230, 233, 239)),
+            tree_icon_style: Style::new().fg(toolbar_active_bg),
 
             scrollbar_thumb_style: Style::new().fg(fg_dim),
             scrollbar_track_style: Style::new().fg(tree_guide),

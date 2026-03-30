@@ -273,14 +273,18 @@ impl DiffView {
             }
         }
 
-        if is_selected {
-            for span in &mut spans {
-                span.style = span.style.bg(theme.selection_bg);
-            }
-            Line::from(spans).style(theme.selection_style)
+        let row_bg = if is_selected {
+            theme.selection_style
         } else {
-            Line::from(spans)
-        }
+            match row.status {
+                DiffStatus::Added => theme.diff_added_bg,
+                DiffStatus::Removed => theme.diff_removed_bg,
+                DiffStatus::Modified => theme.diff_modified_bg,
+                DiffStatus::Unchanged => theme.bg_style,
+            }
+        };
+
+        Line::from(spans).style(row_bg)
     }
 }
 
