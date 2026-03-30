@@ -49,11 +49,40 @@ struct Cli {
     /// Compare FILE against DIFF_FILE and show a structural diff
     #[arg(long)]
     diff: Option<PathBuf>,
+
+    /// Parse the file and print timing info without launching the TUI (benchmarking)
+    #[arg(long, hide = true)]
+    bench: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let theme = cli.theme.into_theme();
+
+    // Bench mode: parse only, print timing, exit
+    if cli.bench {
+        let Some(ref path) = cli.file else {
+            eprintln!("--bench requires a FILE argument");
+            std::process::exit(1);
+        };
+        let start = std::time::Instant::now();
+        let outcome = parser::parse_file_ex(path)?;
+        let parse_ms = start.elapsed().as_millis();
+        let (nodes, strategy) = match outcome {
+            parser::ParseOutcome::Full(doc) => (doc.metadata().total_nodes, "full"),
+            parser::ParseOutcome::Lazy(lazy) => {
+                let doc = lazy.to_document();
+                (doc.metadata().total_nodes, "lazy")
+            }
+        };
+        let size = std::fs::metadata(path)?.len();
+        println!("file:     {}", path.display());
+        println!("size:     {} bytes ({:.1} MB)", size, size as f64 / 1_048_576.0);
+        println!("strategy: {}", strategy);
+        println!("nodes:    {}", nodes);
+        println!("parse:    {}ms", parse_ms);
+        return Ok(());
+    }
 
     // Diff mode: requires a file argument
     if let Some(diff_path) = cli.diff {
