@@ -229,21 +229,16 @@ impl Widget for FilterBar<'_> {
                 format!("  \u{26a0} {}", err),
                 theme.error_style,
             ));
-        } else {
+        } else if filter.show_suggestions {
             spans.push(Span::styled(
-                "  [Enter] run  [Esc] cancel",
+                "  [Tab] accept  [\u{2191}\u{2193}] navigate  [Esc] close",
                 theme.fg_dim_style,
             ));
-        }
-
-        // Hint text
-        if filter.error.is_none() {
-            let hint = if filter.show_suggestions {
-                "  [Tab] accept  [\u{2191}\u{2193}] navigate"
-            } else {
-                "  [Enter] run  [Tab] suggest  [Esc] cancel"
-            };
-            spans.push(Span::styled(hint, theme.fg_dim_style));
+        } else {
+            spans.push(Span::styled(
+                "  [Enter] run  [Tab] suggest  [Esc] cancel",
+                theme.fg_dim_style,
+            ));
         }
 
         let line = Line::from(spans);
@@ -268,14 +263,26 @@ pub(crate) fn render_suggestions(
     }
 
     let max_shown = filter.suggestions.len().min(8);
-    let popup_height = max_shown as u16 + 1; // +1 for border effect
-    let popup_y = bar_area.y.saturating_sub(popup_height);
-    let popup_width = bar_area.width.min(50);
-    let popup_area = Rect::new(bar_area.x + 3, popup_y, popup_width, popup_height);
+    let popup_height = max_shown as u16 + 2; // +2 for top/bottom border
+    let popup_width = bar_area.width.min(45);
 
-    // Clear background
+    // Position above the filter bar, clamped to screen bounds
+    let screen = frame.area();
+    let popup_y = bar_area.y.saturating_sub(popup_height);
+    let popup_x = (bar_area.x + 3).min(screen.width.saturating_sub(popup_width));
+    let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
+    // Clear + bordered block (ratatui popup pattern)
     frame.render_widget(ratatui::widgets::Clear, popup_area);
 
+    let block = ratatui::widgets::Block::bordered()
+        .border_style(theme.tree_guide_style)
+        .style(theme.bg_style);
+
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    // Render suggestions inside the block
     let mut lines = Vec::new();
     for (i, suggestion) in filter.suggestions.iter().take(max_shown).enumerate() {
         let is_selected = i == filter.suggestion_idx;
@@ -284,15 +291,12 @@ pub(crate) fn render_suggestions(
         } else {
             theme.bg_style
         };
-        lines.push(Line::from(Span::styled(
-            format!(" {} ", suggestion),
-            style,
-        )));
+        lines.push(Line::from(Span::styled(format!(" {suggestion} "), style)));
     }
 
     frame.render_widget(
-        ratatui::widgets::Paragraph::new(lines).style(theme.bg_style),
-        popup_area,
+        ratatui::widgets::Paragraph::new(lines),
+        inner,
     );
 }
 
