@@ -39,7 +39,10 @@ pub fn skip_value(bytes: &[u8], offset: usize) -> Result<usize, ParseError> {
         b'f' => expect_literal(bytes, i, b"false"),
         b'n' => expect_literal(bytes, i, b"null"),
         b'-' | b'0'..=b'9' => skip_number(bytes, i),
-        ch => Err(scan_error(i, &format!("unexpected byte 0x{:02X} ({:?})", ch, ch as char))),
+        ch => Err(scan_error(
+            i,
+            &format!("unexpected byte 0x{:02X} ({:?})", ch, ch as char),
+        )),
     }
 }
 
@@ -178,7 +181,10 @@ fn skip_number(bytes: &[u8], start: usize) -> Result<usize, ParseError> {
 fn expect_literal(bytes: &[u8], start: usize, literal: &[u8]) -> Result<usize, ParseError> {
     let end = start + literal.len();
     if end > bytes.len() || &bytes[start..end] != literal {
-        Err(scan_error(start, &format!("expected {:?}", std::str::from_utf8(literal).unwrap())))
+        Err(scan_error(
+            start,
+            &format!("expected {:?}", std::str::from_utf8(literal).unwrap()),
+        ))
     } else {
         Ok(end)
     }

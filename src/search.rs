@@ -137,9 +137,7 @@ fn search_node(
                     // If the key matches, emit a Key hit and skip the value
                     // check for this child to prevent duplicate hits when both
                     // the key and the value satisfy the query.
-                    if options.search_keys
-                        && matches_value(key, query, options, compiled_regex)
-                    {
+                    if options.search_keys && matches_value(key, query, options, compiled_regex) {
                         hits.push(SearchHit {
                             node_id: *child_id,
                             match_in: MatchLocation::Key(Arc::clone(key)),
@@ -206,7 +204,10 @@ mod tests {
     fn search_finds_key() {
         let doc = test_doc();
         let hits = search(&doc, "email", &SearchOptions::default());
-        assert!(hits.iter().any(|h| matches!(h.match_in, MatchLocation::Key(_))));
+        assert!(
+            hits.iter()
+                .any(|h| matches!(h.match_in, MatchLocation::Key(_)))
+        );
     }
 
     #[test]

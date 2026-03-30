@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::Frame;
 
 use crate::diff::{DiffNode, DiffResult, DiffStats, DiffStatus};
 use crate::keymap::Action;
@@ -140,31 +140,35 @@ impl DiffView {
 
     fn toggle_expand(&mut self) {
         if let Some(row) = self.rows.get(self.scroll.selected)
-            && row.is_container {
-                let path = row.node_path.clone();
-                if self.expanded.contains(&path) {
-                    self.expanded.remove(&path);
-                } else {
-                    self.expanded.insert(path);
-                }
-                self.rebuild_rows();
+            && row.is_container
+        {
+            let path = row.node_path.clone();
+            if self.expanded.contains(&path) {
+                self.expanded.remove(&path);
+            } else {
+                self.expanded.insert(path);
             }
+            self.rebuild_rows();
+        }
     }
 
     fn expand(&mut self) {
         if let Some(row) = self.rows.get(self.scroll.selected)
-            && row.is_container && !row.is_expanded {
-                self.expanded.insert(row.node_path.clone());
-                self.rebuild_rows();
-            }
+            && row.is_container
+            && !row.is_expanded
+        {
+            self.expanded.insert(row.node_path.clone());
+            self.rebuild_rows();
+        }
     }
 
     fn collapse(&mut self) {
         if let Some(row) = self.rows.get(self.scroll.selected)
-            && row.is_expanded {
-                self.expanded.remove(&row.node_path);
-                self.rebuild_rows();
-            }
+            && row.is_expanded
+        {
+            self.expanded.remove(&row.node_path);
+            self.rebuild_rows();
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -183,10 +187,7 @@ impl DiffView {
             DiffStatus::Unchanged => (" ", theme.fg_style),
         };
 
-        spans.push(Span::styled(
-            format!("{}{} ", prefix, indent),
-            style,
-        ));
+        spans.push(Span::styled(format!("{}{} ", prefix, indent), style));
 
         // Expand/collapse icon for containers
         if row.is_container {
@@ -196,22 +197,13 @@ impl DiffView {
 
         // Key label
         if let Some(ref key) = row.key {
-            spans.push(Span::styled(
-                format!("\"{}\"", key),
-                theme.key,
-            ));
-            spans.push(Span::styled(
-                ": ",
-                theme.fg_dim_style,
-            ));
+            spans.push(Span::styled(format!("\"{}\"", key), theme.key));
+            spans.push(Span::styled(": ", theme.fg_dim_style));
         }
 
         // Array index label
         if let Some(idx) = row.array_index {
-            spans.push(Span::styled(
-                format!("[{}] ", idx),
-                theme.fg_dim_style,
-            ));
+            spans.push(Span::styled(format!("[{}] ", idx), theme.fg_dim_style));
         }
 
         // Value display
@@ -220,7 +212,8 @@ impl DiffView {
             let node = self.node_at(&row.node_path);
             let child_count = node.children.len();
             match (&row.left, &row.right) {
-                (Some(serde_json::Value::Object(_)), _) | (_, Some(serde_json::Value::Object(_))) => {
+                (Some(serde_json::Value::Object(_)), _)
+                | (_, Some(serde_json::Value::Object(_))) => {
                     spans.push(Span::styled("{", theme.bracket));
                     if !row.is_expanded {
                         spans.push(Span::styled(
@@ -262,10 +255,7 @@ impl DiffView {
                     if let Some(ref lv) = row.left {
                         spans.push(Span::styled(value_display(lv), theme.diff_removed));
                     }
-                    spans.push(Span::styled(
-                        " → ",
-                        theme.fg_dim_style,
-                    ));
+                    spans.push(Span::styled(" → ", theme.fg_dim_style));
                     if let Some(ref rv) = row.right {
                         spans.push(Span::styled(value_display(rv), theme.diff_added));
                     }
@@ -296,10 +286,7 @@ impl View for DiffView {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let height = area.height as usize;
         if self.rows.is_empty() {
-            let msg = Line::from(Span::styled(
-                "No differences",
-                theme.fg_dim_style,
-            ));
+            let msg = Line::from(Span::styled("No differences", theme.fg_dim_style));
             frame.render_widget(ratatui::widgets::Paragraph::new(msg), area);
             return;
         }
@@ -314,8 +301,7 @@ impl View for DiffView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(lines).style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.rows.len() > height {
@@ -352,10 +338,7 @@ impl View for DiffView {
 
     fn status_info(&self) -> StatusInfo {
         let stats = &self.result.stats;
-        let extra = format!(
-            "+{} -{} ~{}",
-            stats.added, stats.removed, stats.modified
-        );
+        let extra = format!("+{} -{} ~{}", stats.added, stats.removed, stats.modified);
         StatusInfo {
             cursor_path: format!("diff ({}/{})", self.scroll.selected + 1, self.rows.len()),
             extra: Some(extra),
@@ -428,21 +411,39 @@ mod tests {
         view.expand(); // root is selected by default
 
         // Step 2: expand "b" (appears after "a" in sorted order).
-        let b_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
+        let b_idx = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("b"))
+            .unwrap();
         view.scroll.selected = b_idx;
         view.expand();
         assert!(view.rows[b_idx].is_expanded);
 
         // Step 3: expand "a" — its children insert rows BEFORE "b", shifting
         //         "b" to a higher row index.
-        let a_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("a")).unwrap();
+        let a_idx = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("a"))
+            .unwrap();
         view.scroll.selected = a_idx;
         view.expand();
 
         // Verify: "b" must still be expanded despite its row index having changed.
-        let b_idx_after = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
-        assert_ne!(b_idx, b_idx_after, "b should have moved to a different row index");
-        assert!(view.rows[b_idx_after].is_expanded, "b must remain expanded after row shift");
+        let b_idx_after = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("b"))
+            .unwrap();
+        assert_ne!(
+            b_idx, b_idx_after,
+            "b should have moved to a different row index"
+        );
+        assert!(
+            view.rows[b_idx_after].is_expanded,
+            "b must remain expanded after row shift"
+        );
     }
 
     #[test]
@@ -456,20 +457,39 @@ mod tests {
 
         // Expand root, then both children.
         view.expand();
-        let a_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("a")).unwrap();
+        let a_idx = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("a"))
+            .unwrap();
         view.scroll.selected = a_idx;
         view.expand();
-        let b_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
+        let b_idx = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("b"))
+            .unwrap();
         view.scroll.selected = b_idx;
         view.expand();
 
         // Collapse "a" — rows shift, "b" moves up.
-        let a_idx = view.rows.iter().position(|r| r.key.as_deref() == Some("a")).unwrap();
+        let a_idx = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("a"))
+            .unwrap();
         view.scroll.selected = a_idx;
         view.collapse();
 
         // "b" must still be expanded.
-        let b_idx_after = view.rows.iter().position(|r| r.key.as_deref() == Some("b")).unwrap();
-        assert!(view.rows[b_idx_after].is_expanded, "b must remain expanded after a is collapsed");
+        let b_idx_after = view
+            .rows
+            .iter()
+            .position(|r| r.key.as_deref() == Some("b"))
+            .unwrap();
+        assert!(
+            view.rows[b_idx_after].is_expanded,
+            "b must remain expanded after a is collapsed"
+        );
     }
 }

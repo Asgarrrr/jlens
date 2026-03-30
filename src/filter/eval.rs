@@ -133,18 +133,13 @@ fn eval_builtin(input: Value, builtin: &BuiltinFn) -> Result<Vec<Value>, FilterE
 
         BuiltinFn::Keys => match input {
             Value::Object(map) => {
-                let mut keys: Vec<Value> =
-                    map.keys().map(|k| Value::String(k.clone())).collect();
-                keys.sort_by(|a, b| {
-                    a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or(""))
-                });
+                let mut keys: Vec<Value> = map.keys().map(|k| Value::String(k.clone())).collect();
+                keys.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
                 Ok(vec![Value::Array(keys)])
             }
             Value::Array(arr) => {
                 // For arrays, keys = indices
-                let keys: Vec<Value> = (0..arr.len())
-                    .map(|i| Value::Number(i.into()))
-                    .collect();
+                let keys: Vec<Value> = (0..arr.len()).map(|i| Value::Number(i.into())).collect();
                 Ok(vec![Value::Array(keys)])
             }
             _ => Ok(vec![]),

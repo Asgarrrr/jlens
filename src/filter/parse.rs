@@ -141,7 +141,10 @@ impl<'a> Lexer<'a> {
                     tokens.push(Token::Integer(n));
                 }
                 Some(ch) => {
-                    return Err(FilterError::Parse(format!("unexpected character: {:?}", ch)));
+                    return Err(FilterError::Parse(format!(
+                        "unexpected character: {:?}",
+                        ch
+                    )));
                 }
             }
         }
@@ -506,11 +509,41 @@ mod tests {
 
     #[test]
     fn all_builtins() {
-        assert_eq!(p(". | length"), Expr::Pipe(Box::new(Expr::Identity), Box::new(Expr::Builtin(BuiltinFn::Length))));
-        assert_eq!(p(". | keys"), Expr::Pipe(Box::new(Expr::Identity), Box::new(Expr::Builtin(BuiltinFn::Keys))));
-        assert_eq!(p(". | values"), Expr::Pipe(Box::new(Expr::Identity), Box::new(Expr::Builtin(BuiltinFn::Values))));
-        assert_eq!(p(". | type"), Expr::Pipe(Box::new(Expr::Identity), Box::new(Expr::Builtin(BuiltinFn::Type))));
-        assert_eq!(p(". | flatten"), Expr::Pipe(Box::new(Expr::Identity), Box::new(Expr::Builtin(BuiltinFn::Flatten))));
+        assert_eq!(
+            p(". | length"),
+            Expr::Pipe(
+                Box::new(Expr::Identity),
+                Box::new(Expr::Builtin(BuiltinFn::Length))
+            )
+        );
+        assert_eq!(
+            p(". | keys"),
+            Expr::Pipe(
+                Box::new(Expr::Identity),
+                Box::new(Expr::Builtin(BuiltinFn::Keys))
+            )
+        );
+        assert_eq!(
+            p(". | values"),
+            Expr::Pipe(
+                Box::new(Expr::Identity),
+                Box::new(Expr::Builtin(BuiltinFn::Values))
+            )
+        );
+        assert_eq!(
+            p(". | type"),
+            Expr::Pipe(
+                Box::new(Expr::Identity),
+                Box::new(Expr::Builtin(BuiltinFn::Type))
+            )
+        );
+        assert_eq!(
+            p(". | flatten"),
+            Expr::Pipe(
+                Box::new(Expr::Identity),
+                Box::new(Expr::Builtin(BuiltinFn::Flatten))
+            )
+        );
     }
 
     #[test]

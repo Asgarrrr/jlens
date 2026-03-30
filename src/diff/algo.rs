@@ -54,9 +54,7 @@ fn diff_values(
                     DiffStatus::Modified => 2,
                     DiffStatus::Unchanged => 3,
                 };
-                order(a)
-                    .cmp(&order(b))
-                    .then_with(|| a.key.cmp(&b.key))
+                order(a).cmp(&order(b)).then_with(|| a.key.cmp(&b.key))
             });
 
             // The object container itself is Unchanged unless all children are Unchanged
@@ -88,7 +86,8 @@ fn diff_values(
 
             // Items in both — recurse
             for i in 0..common {
-                let child = diff_values(&left_arr[i], &right_arr[i], None, Some(i), depth + 1, stats);
+                let child =
+                    diff_values(&left_arr[i], &right_arr[i], None, Some(i), depth + 1, stats);
                 children.push(child);
             }
 
@@ -378,7 +377,12 @@ mod tests {
         assert_eq!(r.stats.added, 1);
         assert_eq!(r.stats.removed, 0);
         // Find child "b"
-        let b = r.root.children.iter().find(|c| c.key.as_deref() == Some("b")).unwrap();
+        let b = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("b"))
+            .unwrap();
         assert_eq!(b.status, DiffStatus::Added);
     }
 
@@ -388,7 +392,12 @@ mod tests {
         let right = json!({ "a": 1 });
         let r = diff(&left, &right);
         assert_eq!(r.stats.removed, 1);
-        let b = r.root.children.iter().find(|c| c.key.as_deref() == Some("b")).unwrap();
+        let b = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("b"))
+            .unwrap();
         assert_eq!(b.status, DiffStatus::Removed);
     }
 
@@ -398,7 +407,12 @@ mod tests {
         let right = json!({ "a": 2 });
         let r = diff(&left, &right);
         assert_eq!(r.stats.modified, 1);
-        let a = r.root.children.iter().find(|c| c.key.as_deref() == Some("a")).unwrap();
+        let a = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("a"))
+            .unwrap();
         assert_eq!(a.status, DiffStatus::Modified);
     }
 
@@ -407,11 +421,24 @@ mod tests {
         let left = json!({ "user": { "name": "Alice", "age": 30 } });
         let right = json!({ "user": { "name": "Alice", "age": 31 } });
         let r = diff(&left, &right);
-        let user = r.root.children.iter().find(|c| c.key.as_deref() == Some("user")).unwrap();
+        let user = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("user"))
+            .unwrap();
         assert_eq!(user.status, DiffStatus::Modified);
-        let age = user.children.iter().find(|c| c.key.as_deref() == Some("age")).unwrap();
+        let age = user
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("age"))
+            .unwrap();
         assert_eq!(age.status, DiffStatus::Modified);
-        let name = user.children.iter().find(|c| c.key.as_deref() == Some("name")).unwrap();
+        let name = user
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("name"))
+            .unwrap();
         assert_eq!(name.status, DiffStatus::Unchanged);
     }
 
@@ -420,7 +447,12 @@ mod tests {
         let left = json!({ "x": 42 });
         let right = json!({ "x": "42" });
         let r = diff(&left, &right);
-        let x = r.root.children.iter().find(|c| c.key.as_deref() == Some("x")).unwrap();
+        let x = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.key.as_deref() == Some("x"))
+            .unwrap();
         assert_eq!(x.status, DiffStatus::Modified);
         assert_eq!(r.stats.modified, 1);
     }
@@ -433,7 +465,12 @@ mod tests {
         assert_eq!(r.stats.added, 1);
         assert_eq!(r.stats.removed, 0);
         // index 2 should be Added
-        let c2 = r.root.children.iter().find(|c| c.array_index == Some(2)).unwrap();
+        let c2 = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.array_index == Some(2))
+            .unwrap();
         assert_eq!(c2.status, DiffStatus::Added);
     }
 
@@ -444,7 +481,12 @@ mod tests {
         let r = diff(&left, &right);
         assert_eq!(r.stats.removed, 1);
         assert_eq!(r.stats.added, 0);
-        let c2 = r.root.children.iter().find(|c| c.array_index == Some(2)).unwrap();
+        let c2 = r
+            .root
+            .children
+            .iter()
+            .find(|c| c.array_index == Some(2))
+            .unwrap();
         assert_eq!(c2.status, DiffStatus::Removed);
     }
 

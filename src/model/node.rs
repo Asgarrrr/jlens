@@ -107,11 +107,7 @@ pub struct JsonDocument {
 
 impl JsonDocument {
     /// Construct from pre-built parts. Used by the lazy parser.
-    pub fn from_raw_parts(
-        nodes: Vec<JsonNode>,
-        root: NodeId,
-        metadata: DocumentMetadata,
-    ) -> Self {
+    pub fn from_raw_parts(nodes: Vec<JsonNode>, root: NodeId, metadata: DocumentMetadata) -> Self {
         Self {
             nodes,
             root,
@@ -227,7 +223,10 @@ impl DocumentBuilder {
 
     fn allocate(&mut self, node: JsonNode) -> NodeId {
         let len = self.nodes.len();
-        assert!(len < u32::MAX as usize, "document exceeds maximum node count (4 billion)");
+        assert!(
+            len < u32::MAX as usize,
+            "document exceeds maximum node count (4 billion)"
+        );
         let id = NodeId(len as u32);
         self.nodes.push(node);
         id
@@ -365,7 +364,10 @@ mod tests {
         // Find "scores" array, then its first child
         let root = doc.node(doc.root());
         if let JsonValue::Object(entries) = &root.value {
-            let (_, scores_id) = entries.iter().find(|(k, _)| k.as_ref() == "scores").unwrap();
+            let (_, scores_id) = entries
+                .iter()
+                .find(|(k, _)| k.as_ref() == "scores")
+                .unwrap();
             let scores_node = doc.node(*scores_id);
             if let JsonValue::Array(items) = &scores_node.value {
                 let path = doc.path_of(items[0]);
@@ -390,7 +392,10 @@ mod tests {
         let doc = sample_doc();
         let root = doc.node(doc.root());
         if let JsonValue::Object(entries) = &root.value {
-            let (_, scores_id) = entries.iter().find(|(k, _)| k.as_ref() == "scores").unwrap();
+            let (_, scores_id) = entries
+                .iter()
+                .find(|(k, _)| k.as_ref() == "scores")
+                .unwrap();
             let scores_node = doc.node(*scores_id);
             if let JsonValue::Array(items) = &scores_node.value {
                 let ancestors = doc.ancestors_of(items[0]);

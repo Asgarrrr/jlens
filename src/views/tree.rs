@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::Frame;
 
 use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
@@ -138,31 +138,28 @@ impl TreeView {
 
             // Collect children BEFORE pushing the row, avoiding borrow issues.
             // We gather (key, array_index, child_id, is_last_child) tuples.
-            let children: Vec<ChildEntry> =
-                if is_expanded && is_expandable {
-                    match &node.value {
-                        JsonValue::Array(ids) => {
-                            let len = ids.len();
-                            ids.iter()
-                                .enumerate()
-                                .map(|(i, &cid)| (None, Some(i), cid, i == len - 1))
-                                .collect()
-                        }
-                        JsonValue::Object(entries) => {
-                            let len = entries.len();
-                            entries
-                                .iter()
-                                .enumerate()
-                                .map(|(i, (k, cid))| {
-                                    (Some(k.clone()), None, *cid, i == len - 1)
-                                })
-                                .collect()
-                        }
-                        _ => Vec::new(),
+            let children: Vec<ChildEntry> = if is_expanded && is_expandable {
+                match &node.value {
+                    JsonValue::Array(ids) => {
+                        let len = ids.len();
+                        ids.iter()
+                            .enumerate()
+                            .map(|(i, &cid)| (None, Some(i), cid, i == len - 1))
+                            .collect()
                     }
-                } else {
-                    Vec::new()
-                };
+                    JsonValue::Object(entries) => {
+                        let len = entries.len();
+                        entries
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (k, cid))| (Some(k.clone()), None, *cid, i == len - 1))
+                            .collect()
+                    }
+                    _ => Vec::new(),
+                }
+            } else {
+                Vec::new()
+            };
 
             self.visible_rows.push(FlattenedRow {
                 node_id: frame.id,
@@ -243,34 +240,37 @@ impl TreeView {
 
     fn toggle_expand(&mut self) {
         if let Some(row) = self.visible_rows.get(self.selected)
-            && row.is_expandable {
-                let id = row.node_id;
-                if self.expanded.contains(&id) {
-                    self.expanded.remove(&id);
-                    self.dirty = true;
-                    self.rebuild_visible_rows();
-                } else if self.stub_ids.contains(&id) {
-                    // This is a lazy stub — signal to App for expansion.
-                    self.pending_expand_stub = Some(id);
-                } else {
-                    self.expanded.insert(id);
-                    self.dirty = true;
-                    self.rebuild_visible_rows();
-                }
+            && row.is_expandable
+        {
+            let id = row.node_id;
+            if self.expanded.contains(&id) {
+                self.expanded.remove(&id);
+                self.dirty = true;
+                self.rebuild_visible_rows();
+            } else if self.stub_ids.contains(&id) {
+                // This is a lazy stub — signal to App for expansion.
+                self.pending_expand_stub = Some(id);
+            } else {
+                self.expanded.insert(id);
+                self.dirty = true;
+                self.rebuild_visible_rows();
             }
+        }
     }
 
     fn expand(&mut self) {
         if let Some(row) = self.visible_rows.get(self.selected)
-            && row.is_expandable && !row.is_expanded {
-                if self.stub_ids.contains(&row.node_id) {
-                    self.pending_expand_stub = Some(row.node_id);
-                } else {
-                    self.expanded.insert(row.node_id);
-                    self.dirty = true;
-                    self.rebuild_visible_rows();
-                }
+            && row.is_expandable
+            && !row.is_expanded
+        {
+            if self.stub_ids.contains(&row.node_id) {
+                self.pending_expand_stub = Some(row.node_id);
+            } else {
+                self.expanded.insert(row.node_id);
+                self.dirty = true;
+                self.rebuild_visible_rows();
             }
+        }
     }
 
     fn collapse(&mut self) {
@@ -368,10 +368,7 @@ impl TreeView {
                 } else {
                     CONNECTOR_BLANK
                 };
-                spans.push(Span::styled(
-                    connector,
-                    theme.tree_guide_style,
-                ));
+                spans.push(Span::styled(connector, theme.tree_guide_style));
             }
 
             // This node's connector
@@ -380,10 +377,7 @@ impl TreeView {
             } else {
                 CONNECTOR_TEE
             };
-            spans.push(Span::styled(
-                connector.to_string(),
-                theme.tree_guide_style,
-            ));
+            spans.push(Span::styled(connector.to_string(), theme.tree_guide_style));
         }
 
         // Expand/collapse icon for containers
@@ -404,10 +398,7 @@ impl TreeView {
 
         // Array index (if in an array)
         if let Some(idx) = row.array_index {
-            spans.push(Span::styled(
-                format!("[{}] ", idx),
-                theme.fg_dim_style,
-            ));
+            spans.push(Span::styled(format!("[{}] ", idx), theme.fg_dim_style));
         }
 
         // Value rendering
@@ -494,10 +485,7 @@ impl View for TreeView {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let height = area.height as usize;
         if self.visible_rows.is_empty() {
-            let empty = Line::from(Span::styled(
-                "Empty document",
-                theme.fg_dim_style,
-            ));
+            let empty = Line::from(Span::styled("Empty document", theme.fg_dim_style));
             frame.render_widget(ratatui::widgets::Paragraph::new(empty), area);
             return;
         }
@@ -513,8 +501,7 @@ impl View for TreeView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(lines).style(theme.bg_style);
 
         frame.render_widget(paragraph, area);
 

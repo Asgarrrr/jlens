@@ -1,7 +1,7 @@
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState};
-use ratatui::Frame;
 
 use crate::model::node::DocumentMetadata;
 use crate::theme::Theme;
@@ -10,28 +10,21 @@ use crate::views::{StatusInfo, ViewMode};
 
 /// Top-level layout: `[toolbar, main, status]`.
 pub fn layout(area: Rect) -> [Rect; 3] {
-    Layout::vertical([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)])
-        .areas(area)
+    Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(1),
+        Constraint::Length(1),
+    ])
+    .areas(area)
 }
 
 /// Render the toolbar with view mode tabs.
-pub fn render_toolbar(
-    frame: &mut Frame,
-    area: Rect,
-    active_mode: ViewMode,
-    theme: &Theme,
-) {
+pub fn render_toolbar(frame: &mut Frame, area: Rect, active_mode: ViewMode, theme: &Theme) {
     let mut spans: Vec<Span> = Vec::new();
 
-    spans.push(Span::styled(
-        " jlens ",
-        theme.toolbar_brand_style,
-    ));
+    spans.push(Span::styled(" jlens ", theme.toolbar_brand_style));
 
-    spans.push(Span::styled(
-        " ",
-        theme.toolbar_bg_style,
-    ));
+    spans.push(Span::styled(" ", theme.toolbar_bg_style));
 
     let modes: &[ViewMode] = &ViewMode::ALL;
     for (i, &mode) in modes.iter().enumerate() {
@@ -49,7 +42,10 @@ pub fn render_toolbar(
     }
 
     // Right-align "? Help" hint
-    let used_width: usize = spans.iter().map(|s| crate::util::display_width(&s.content)).sum();
+    let used_width: usize = spans
+        .iter()
+        .map(|s| crate::util::display_width(&s.content))
+        .sum();
     let help_text = "? Help ";
     let help_width = crate::util::display_width(help_text);
     let total_width = area.width as usize;
@@ -106,32 +102,26 @@ pub fn render_status_bar(
     spans.extend(breadcrumb_spans(&status.cursor_path, theme));
 
     if let Some(ref extra) = status.extra {
-        spans.push(Span::styled(
-            format!(" {} ", extra),
-            theme.status_fg_style,
-        ));
+        spans.push(Span::styled(format!(" {} ", extra), theme.status_fg_style));
     }
 
     // Calculate padding (use display width for correct Unicode handling)
-    let left_width: usize = spans.iter().map(|s| crate::util::display_width(&s.content)).sum();
+    let left_width: usize = spans
+        .iter()
+        .map(|s| crate::util::display_width(&s.content))
+        .sum();
     let right_width = crate::util::display_width(&right);
     let total_width = area.width as usize;
     let padding = total_width.saturating_sub(left_width + right_width);
 
-    spans.push(Span::styled(
-        " ".repeat(padding),
-        theme.status_style,
-    ));
+    spans.push(Span::styled(" ".repeat(padding), theme.status_style));
 
     // Right: file info
     spans.push(Span::styled(
         format!(" {} ", file_name),
         theme.status_fg_style,
     ));
-    spans.push(Span::styled(
-        right,
-        theme.status_dim_style,
-    ));
+    spans.push(Span::styled(right, theme.status_dim_style));
 
     let line = Line::from(spans).style(theme.status_style);
     let paragraph = ratatui::widgets::Paragraph::new(line);
@@ -198,18 +188,12 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         .map(|(key, desc)| {
             if desc.is_empty() && !key.is_empty() {
                 // Section header
-                Line::from(Span::styled(
-                    format!(" {}", key),
-                    theme.help_title_style,
-                ))
+                Line::from(Span::styled(format!(" {}", key), theme.help_title_style))
             } else if key.is_empty() {
                 Line::from("")
             } else {
                 Line::from(vec![
-                    Span::styled(
-                        format!("  {:<18}", key),
-                        theme.fg_bold_style,
-                    ),
+                    Span::styled(format!("  {:<18}", key), theme.fg_bold_style),
                     Span::styled(desc.to_string(), theme.fg_dim_style),
                 ])
             }
@@ -289,7 +273,11 @@ fn breadcrumb_spans(path: &str, theme: &Theme) -> Vec<Span<'static>> {
                         break;
                     }
                 }
-                let fg = if bracket.contains('"') { key_fg } else { idx_fg };
+                let fg = if bracket.contains('"') {
+                    key_fg
+                } else {
+                    idx_fg
+                };
                 spans.push(Span::styled(bracket, Style::new().fg(fg).bg(bg)));
             }
             _ => {
@@ -392,4 +380,3 @@ pub fn render_scrollbar(
         .track_style(theme.scrollbar_track_style);
     frame.render_stateful_widget(scrollbar, area, &mut state);
 }
-

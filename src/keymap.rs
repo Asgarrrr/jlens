@@ -79,7 +79,6 @@ impl Default for KeyMap {
             (KeyModifiers::NONE, KeyCode::Home, Action::Home),
             (KeyModifiers::NONE, KeyCode::End, Action::End),
             (KeyModifiers::SHIFT, Char('G'), Action::End),
-
             // Tree / Diff
             (KeyModifiers::NONE, Enter, ToggleExpand),
             (KeyModifiers::NONE, Char(' '), ToggleExpand),
@@ -89,16 +88,13 @@ impl Default for KeyMap {
             (KeyModifiers::NONE, Char('h'), CollapseNode),
             (KeyModifiers::NONE, Char('e'), ExpandAll),
             (KeyModifiers::SHIFT, Char('E'), CollapseAll),
-
             // Table
             (KeyModifiers::NONE, Tab, NextColumn),
             (KeyModifiers::SHIFT, BackTab, PrevColumn),
             (KeyModifiers::NONE, Char('s'), CycleSort),
-
             // Clipboard
             (KeyModifiers::NONE, Char('y'), CopyValue),
             (KeyModifiers::SHIFT, Char('Y'), CopyPath),
-
             // Global
             (KeyModifiers::NONE, Char('q'), Quit),
             (KeyModifiers::CONTROL, Char('c'), Quit),

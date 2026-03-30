@@ -21,12 +21,7 @@ pub fn parse(path: &Path) -> Result<LazyDocument, ParseError> {
     let mmap = unsafe { Mmap::map(&file)? };
     let mmap = Arc::new(mmap);
 
-    let doc = LazyDocument::from_mmap(
-        mmap,
-        Some(path.to_path_buf()),
-        source_size,
-        Instant::now(),
-    )?;
+    let doc = LazyDocument::from_mmap(mmap, Some(path.to_path_buf()), source_size, Instant::now())?;
 
     Ok(doc)
 }

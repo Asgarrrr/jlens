@@ -31,12 +31,8 @@ pub fn parse(path: &Path) -> Result<JsonDocument, ParseError> {
 
     let parse_time = start.elapsed();
 
-    let doc = DocumentBuilder::from_serde_value(
-        value,
-        Some(path.to_path_buf()),
-        source_size,
-        parse_time,
-    );
+    let doc =
+        DocumentBuilder::from_serde_value(value, Some(path.to_path_buf()), source_size, parse_time);
 
     Ok(doc)
 }

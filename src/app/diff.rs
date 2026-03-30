@@ -3,12 +3,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
 
 use crate::diff::algo;
 use crate::diff::view::DiffView;
@@ -18,7 +18,7 @@ use crate::parser;
 use crate::theme::Theme;
 use crate::ui;
 use crate::views::raw;
-use crate::views::{View, ViewAction, StatusInfo};
+use crate::views::{StatusInfo, View, ViewAction};
 
 /// Run a structural diff between two JSON files, showing the result in the TUI.
 pub fn run_diff(path_a: &Path, path_b: &Path, theme: Theme) -> Result<()> {
@@ -62,29 +62,39 @@ fn run_diff_app(
         if needs_redraw {
             needs_redraw = false;
             terminal.draw(|frame| {
-            let [toolbar, main_area, status_area] = ui::layout(frame.area());
-            last_main_area = main_area;
+                let [toolbar, main_area, status_area] = ui::layout(frame.area());
+                last_main_area = main_area;
 
-            diff_view.set_viewport_height(main_area.height as usize);
+                diff_view.set_viewport_height(main_area.height as usize);
 
-            frame.render_widget(DiffToolbar { title, theme: &theme }, toolbar);
-            diff_view.render(frame, main_area, &theme);
+                frame.render_widget(
+                    DiffToolbar {
+                        title,
+                        theme: &theme,
+                    },
+                    toolbar,
+                );
+                diff_view.render(frame, main_area, &theme);
 
-            let status = diff_view.status_info();
-            let stats = diff_view.stats();
-            let stats_str = format!(
-                " +{} added  -{} removed  ~{} modified ",
-                stats.added, stats.removed, stats.modified
-            );
-            frame.render_widget(
-                DiffStatusBar { status: &status, stats_str: &stats_str, theme: &theme },
-                status_area,
-            );
+                let status = diff_view.status_info();
+                let stats = diff_view.stats();
+                let stats_str = format!(
+                    " +{} added  -{} removed  ~{} modified ",
+                    stats.added, stats.removed, stats.modified
+                );
+                frame.render_widget(
+                    DiffStatusBar {
+                        status: &status,
+                        stats_str: &stats_str,
+                        theme: &theme,
+                    },
+                    status_area,
+                );
 
-            if show_help {
-                ui::render_help_overlay(frame, frame.area(), &theme);
-            }
-        })?;
+                if show_help {
+                    ui::render_help_overlay(frame, frame.area(), &theme);
+                }
+            })?;
         }
 
         if should_quit {
@@ -107,8 +117,8 @@ fn run_diff_app(
             }
             AppEvent::Mouse(mouse) => {
                 needs_redraw = true;
-                use crossterm::event::MouseEventKind;
                 use crate::keymap::Action;
+                use crossterm::event::MouseEventKind;
                 match mouse.kind {
                     MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
                         let scroll_action = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
@@ -136,7 +146,9 @@ fn run_diff_app(
                     _ => {}
                 }
             }
-            AppEvent::Resize => { needs_redraw = true; }
+            AppEvent::Resize => {
+                needs_redraw = true;
+            }
             AppEvent::Tick => {}
         }
     }
@@ -156,10 +168,7 @@ struct DiffToolbar<'a> {
 impl Widget for DiffToolbar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let spans = vec![
-            Span::styled(
-                " jlens ",
-                self.theme.toolbar_brand_style,
-            ),
+            Span::styled(" jlens ", self.theme.toolbar_brand_style),
             Span::styled(
                 format!("  {} ", self.title),
                 self.theme.toolbar_inactive_style,
@@ -185,18 +194,9 @@ impl Widget for DiffStatusBar<'_> {
         let padding = total_w.saturating_sub(left_width + right_width);
 
         let spans = vec![
-            Span::styled(
-                left,
-                self.theme.toolbar_brand_style,
-            ),
-            Span::styled(
-                " ".repeat(padding),
-                self.theme.status_style,
-            ),
-            Span::styled(
-                self.stats_str,
-                self.theme.status_fg_style,
-            ),
+            Span::styled(left, self.theme.toolbar_brand_style),
+            Span::styled(" ".repeat(padding), self.theme.status_style),
+            Span::styled(self.stats_str, self.theme.status_fg_style),
         ];
         let line = Line::from(spans).style(self.theme.status_style);
         ratatui::widgets::Paragraph::new(line).render(area, buf);

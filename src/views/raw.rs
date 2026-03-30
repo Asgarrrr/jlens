@@ -1,6 +1,6 @@
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::Frame;
 
 use crate::keymap::Action;
 use crate::model::node::{JsonDocument, NodeId};
@@ -42,7 +42,8 @@ impl RawView {
 
     fn line(&self, idx: usize) -> &str {
         let start = self.line_offsets[idx] as usize;
-        let end = self.line_offsets
+        let end = self
+            .line_offsets
             .get(idx + 1)
             .map(|&o| o as usize)
             .unwrap_or(self.pretty.len());
@@ -62,7 +63,11 @@ impl View for RawView {
             .map(|i| {
                 let is_selected = i == self.scroll.selected;
                 let line_num = format!("{:>width$} ", i + 1, width = gutter_width);
-                let content = if i < self.total_lines() { self.line(i) } else { "" };
+                let content = if i < self.total_lines() {
+                    self.line(i)
+                } else {
+                    ""
+                };
 
                 let mut spans = vec![
                     Span::styled(line_num, theme.fg_dim_style),
@@ -80,8 +85,7 @@ impl View for RawView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(lines).style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.total_lines() > height {
@@ -103,7 +107,11 @@ impl View for RawView {
     }
 
     fn status_info(&self) -> StatusInfo {
-        let pos = if self.total_lines() == 0 { 0 } else { self.scroll.selected + 1 };
+        let pos = if self.total_lines() == 0 {
+            0
+        } else {
+            self.scroll.selected + 1
+        };
         StatusInfo {
             cursor_path: format!("line {}/{}", pos, self.total_lines()),
             extra: None,
@@ -184,7 +192,11 @@ pub(crate) fn rebuild_serde_value(doc: &JsonDocument, id: NodeId) -> serde_json:
                 };
                 let start = values.len() - count;
                 let vals = values.drain(start..);
-                let map = entries.iter().map(|(k, _)| k.to_string()).zip(vals).collect();
+                let map = entries
+                    .iter()
+                    .map(|(k, _)| k.to_string())
+                    .zip(vals)
+                    .collect();
                 values.push(serde_json::Value::Object(map));
             }
         }
@@ -368,10 +380,8 @@ mod tests {
 
     #[test]
     fn rebuild_simple_object() {
-        let json: serde_json::Value = serde_json::from_str(
-            r#"{"a": 1, "b": [true, null], "c": "hello"}"#,
-        )
-        .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(r#"{"a": 1, "b": [true, null], "c": "hello"}"#).unwrap();
         let doc = crate::model::node::DocumentBuilder::from_serde_value(
             json.clone(),
             None,

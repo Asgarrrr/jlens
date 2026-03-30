@@ -6,8 +6,8 @@ use std::time::Instant;
 use memmap2::Mmap;
 
 use crate::model::node::{DocumentMetadata, JsonDocument, JsonNode, JsonValue, NodeId};
-use crate::parser::scan;
 use crate::parser::ParseError;
+use crate::parser::scan;
 
 // ---------------------------------------------------------------------------
 // LazyDocument — shallow arena backed by a memory-mapped file
@@ -185,9 +185,12 @@ impl LazyDocument {
             JsonValue::Array(children) => {
                 JsonValue::Array(children.iter().map(|c| remap(*c)).collect())
             }
-            JsonValue::Object(entries) => {
-                JsonValue::Object(entries.iter().map(|(k, c)| (k.clone(), remap(*c))).collect())
-            }
+            JsonValue::Object(entries) => JsonValue::Object(
+                entries
+                    .iter()
+                    .map(|(k, c)| (k.clone(), remap(*c)))
+                    .collect(),
+            ),
             _ => sub_root_value,
         };
         self.nodes[stub_id.index()].value = new_value;
@@ -219,11 +222,7 @@ impl LazyDocument {
     /// Build a `JsonDocument` snapshot from the current state.
     /// Clones the arena — use `into_document` when the LazyDocument is no longer needed.
     pub fn to_document(&self) -> JsonDocument {
-        JsonDocument::from_raw_parts(
-            self.nodes.clone(),
-            self.root,
-            self.metadata.clone(),
-        )
+        JsonDocument::from_raw_parts(self.nodes.clone(), self.root, self.metadata.clone())
     }
 
     /// Get the set of stub node IDs (for the tree view to render differently).
@@ -402,8 +401,7 @@ impl<'a> ShallowBuilder<'a> {
         let mut children: Vec<NodeId> = Vec::new();
 
         while i < self.bytes.len() && self.bytes[i] != b']' {
-            let (child_id, after_value) =
-                self.parse_value(i, Some(id), depth.saturating_add(1))?;
+            let (child_id, after_value) = self.parse_value(i, Some(id), depth.saturating_add(1))?;
             children.push(child_id);
 
             i = scan::skip_whitespace(self.bytes, after_value);
@@ -514,7 +512,8 @@ mod tests {
         // "nested" at depth 2 exceeds MAX_SHALLOW_DEPTH(1) and is stubbed.
         let json = br#"{"items": {"nested": {"x": 1, "y": 2}}}"#;
         let mmap = make_mmap(json);
-        let mut lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+        let mut lazy =
+            LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
 
         // Find the stub.
         assert!(lazy.has_pending_stubs());
@@ -544,7 +543,8 @@ mod tests {
         // and becomes a new stub.
         let json = br#"{"a": {"b": {"c": {"d": {"e": [1, 2]}}}}}"#;
         let mmap = make_mmap(json);
-        let mut lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+        let mut lazy =
+            LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
 
         // Initial: "b" at depth 2 is stubbed.
         assert!(lazy.has_pending_stubs());
@@ -570,7 +570,8 @@ mod tests {
     fn expand_array_stub() {
         let json = br#"{"data": [10, 20, 30]}"#;
         let mmap = make_mmap(json);
-        let mut lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+        let mut lazy =
+            LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
 
         if !lazy.has_pending_stubs() {
             // "data" array is at depth 1 — within threshold, so fully parsed.

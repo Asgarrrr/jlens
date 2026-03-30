@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, Row, Table};
-use ratatui::Frame;
 
 use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
@@ -40,20 +40,22 @@ fn find_table_data(doc: &JsonDocument) -> TableData {
 
     // Case 1: root is an array of objects
     if let JsonValue::Array(children) = &root_node.value
-        && is_array_of_objects(doc, children) {
-            let (columns, rows) = build_table(doc, children);
-            return TableData::Found { columns, rows };
-        }
+        && is_array_of_objects(doc, children)
+    {
+        let (columns, rows) = build_table(doc, children);
+        return TableData::Found { columns, rows };
+    }
 
     // Case 2: root is an object — find first child that is an array of objects
     if let JsonValue::Object(entries) = &root_node.value {
         for (_, child_id) in entries {
             let child = doc.node(*child_id);
             if let JsonValue::Array(children) = &child.value
-                && is_array_of_objects(doc, children) {
-                    let (columns, rows) = build_table(doc, children);
-                    return TableData::Found { columns, rows };
-                }
+                && is_array_of_objects(doc, children)
+            {
+                let (columns, rows) = build_table(doc, children);
+                return TableData::Found { columns, rows };
+            }
         }
     }
 
@@ -162,7 +164,11 @@ impl View for TableView {
         let available_width = area.width as usize;
         let col_count = self.columns.len();
         // Reserve 3 chars per separator between columns (" │ ") when there are multiple columns.
-        let separator_total = if col_count > 1 { (col_count - 1) * 3 } else { 0 };
+        let separator_total = if col_count > 1 {
+            (col_count - 1) * 3
+        } else {
+            0
+        };
         let col_width = ((available_width.saturating_sub(separator_total)) / col_count).max(8);
 
         // Build header as a single line with separators between column labels.
@@ -172,7 +178,11 @@ impl View for TableView {
             .enumerate()
             .flat_map(|(col_idx, c)| {
                 let label = if self.sort_column == Some(col_idx) {
-                    let indicator = if self.sort_ascending { " \u{25b2}" } else { " \u{25bc}" };
+                    let indicator = if self.sort_ascending {
+                        " \u{25b2}"
+                    } else {
+                        " \u{25bc}"
+                    };
                     format!("{}{}", c, indicator)
                 } else {
                     c.to_string()
@@ -215,7 +225,8 @@ impl View for TableView {
                         let text = cell_val.as_deref().unwrap_or("\u{2014}");
                         let max_chars = col_width.saturating_sub(2);
                         let truncated = if text.chars().count() > max_chars {
-                            let cut = crate::util::truncate_chars(text, max_chars.saturating_sub(1));
+                            let cut =
+                                crate::util::truncate_chars(text, max_chars.saturating_sub(1));
                             format!("{}\u{2026}", cut)
                         } else {
                             text.to_string()
@@ -245,8 +256,19 @@ impl View for TableView {
         // Scrollbar for the data area (below the header row)
         let data_height = area.height.saturating_sub(1) as usize;
         if data_height > 0 && self.rows.len() > data_height {
-            let scrollbar_area = Rect::new(area.x, area.y + 1, area.width, area.height.saturating_sub(1));
-            crate::ui::render_scrollbar(frame, scrollbar_area, self.rows.len(), self.scroll.offset, theme);
+            let scrollbar_area = Rect::new(
+                area.x,
+                area.y + 1,
+                area.width,
+                area.height.saturating_sub(1),
+            );
+            crate::ui::render_scrollbar(
+                frame,
+                scrollbar_area,
+                self.rows.len(),
+                self.scroll.offset,
+                theme,
+            );
         }
     }
 
@@ -271,7 +293,12 @@ impl View for TableView {
         let extra = if let Some(col) = self.sort_column {
             let col_name = self.columns.get(col).map(|c| c.as_ref()).unwrap_or("?");
             let dir = if self.sort_ascending { "asc" } else { "desc" };
-            format!("{} columns | sorted by {} ({})", self.columns.len(), col_name, dir)
+            format!(
+                "{} columns | sorted by {} ({})",
+                self.columns.len(),
+                col_name,
+                dir
+            )
         } else {
             format!("{} columns", self.columns.len())
         };
@@ -359,7 +386,10 @@ fn pad_or_truncate(s: &str, width: usize) -> String {
         if width == 0 {
             return String::new();
         }
-        format!("{}\u{2026}", crate::util::truncate_chars(s, width.saturating_sub(1)))
+        format!(
+            "{}\u{2026}",
+            crate::util::truncate_chars(s, width.saturating_sub(1))
+        )
     } else {
         format!("{}{}", s, " ".repeat(width - char_count))
     }

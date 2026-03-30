@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::Frame;
 
 use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
@@ -48,7 +48,6 @@ impl StatsView {
             scroll: crate::util::ScrollState::new(),
         }
     }
-
 }
 
 impl View for StatsView {
@@ -63,15 +62,11 @@ impl View for StatsView {
             .map(|i| {
                 let is_selected = i == self.scroll.selected;
                 let line = match &self.lines[i] {
-                    StatsLine::Header(text) => Line::from(Span::styled(
-                        format!("  {} ", text),
-                        theme.help_title_style,
-                    )),
+                    StatsLine::Header(text) => {
+                        Line::from(Span::styled(format!("  {} ", text), theme.help_title_style))
+                    }
                     StatsLine::KeyValue(key, value) => Line::from(vec![
-                        Span::styled(
-                            format!("    {:<24}", key),
-                            theme.fg_dim_style,
-                        ),
+                        Span::styled(format!("    {:<24}", key), theme.fg_dim_style),
                         Span::styled(value.clone(), theme.fg_style),
                     ]),
                     StatsLine::Bar(label, segments) => {
@@ -104,8 +99,7 @@ impl View for StatsView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(rendered_lines)
-            .style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(rendered_lines).style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.lines.len() > height {
@@ -367,4 +361,3 @@ fn build_stats_lines(
 
     lines
 }
-

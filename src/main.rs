@@ -77,7 +77,11 @@ fn main() -> Result<()> {
         };
         let size = std::fs::metadata(path)?.len();
         println!("file:     {}", path.display());
-        println!("size:     {} bytes ({:.1} MB)", size, size as f64 / 1_048_576.0);
+        println!(
+            "size:     {} bytes ({:.1} MB)",
+            size,
+            size as f64 / 1_048_576.0
+        );
         println!("strategy: {}", strategy);
         println!("nodes:    {}", nodes);
         println!("parse:    {}ms", parse_ms);

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::Frame;
 
 use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
@@ -32,7 +32,6 @@ impl PathView {
             scroll: crate::util::ScrollState::new(),
         }
     }
-
 }
 
 impl View for PathView {
@@ -59,10 +58,7 @@ impl View for PathView {
 
                 let spans = vec![
                     Span::styled(entry.path.as_str(), theme.key),
-                    Span::styled(
-                        " = ",
-                        theme.fg_dim_style,
-                    ),
+                    Span::styled(" = ", theme.fg_dim_style),
                     Span::styled(
                         entry.value.as_str(),
                         theme.style_for_leaf_value(&entry.value),
@@ -77,8 +73,7 @@ impl View for PathView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(lines)
-            .style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(lines).style(theme.bg_style);
         frame.render_widget(paragraph, area);
 
         if self.entries.len() > height {
@@ -119,7 +114,11 @@ impl View for PathView {
             .get(self.scroll.selected)
             .map(|e| e.path.clone())
             .unwrap_or_else(|| "$".to_string());
-        let pos = if total == 0 { 0 } else { self.scroll.selected + 1 };
+        let pos = if total == 0 {
+            0
+        } else {
+            self.scroll.selected + 1
+        };
         StatusInfo {
             cursor_path: path,
             extra: Some(format!("{}/{} leaves", pos, total)),
@@ -165,10 +164,7 @@ fn collect_leaves(doc: &JsonDocument, root: NodeId, root_path: String, out: &mut
             }
             _ => {
                 let value = format_leaf_value(&node.value);
-                out.push(PathEntry {
-                    path,
-                    value,
-                });
+                out.push(PathEntry { path, value });
             }
         }
     }

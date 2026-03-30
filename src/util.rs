@@ -49,7 +49,11 @@ pub struct ScrollState {
 
 impl ScrollState {
     pub fn new() -> Self {
-        Self { selected: 0, offset: 0, viewport: 0 }
+        Self {
+            selected: 0,
+            offset: 0,
+            viewport: 0,
+        }
     }
 
     pub fn move_up(&mut self) {
