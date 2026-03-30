@@ -138,6 +138,7 @@ impl Widget for SearchBar<'_> {
         let search = self.state;
         let theme = self.theme;
 
+        let no_matches = search.hits.is_empty() && !search.query.is_empty();
         let hit_info = if search.hits.is_empty() {
             if search.query.is_empty() {
                 String::new()
@@ -165,6 +166,7 @@ impl Widget for SearchBar<'_> {
             ));
         }
 
+        let hit_info_style = if no_matches { theme.error_style } else { theme.fg_dim_style };
         spans.extend([
             Span::styled(
                 search.query.as_str(),
@@ -176,7 +178,7 @@ impl Widget for SearchBar<'_> {
             ),
             Span::styled(
                 hit_info,
-                theme.fg_dim_style,
+                hit_info_style,
             ),
         ]);
 

@@ -64,10 +64,10 @@ impl View for RawView {
                 let line_num = format!("{:>width$} ", i + 1, width = gutter_width);
                 let content = if i < self.total_lines() { self.line(i) } else { "" };
 
-                let mut spans = vec![Span::styled(
-                    line_num,
-                    theme.fg_dim_style,
-                )];
+                let mut spans = vec![
+                    Span::styled(line_num, theme.fg_dim_style),
+                    Span::styled("│ ", theme.tree_guide_style),
+                ];
 
                 // Simple syntax highlighting by character scanning
                 spans.extend(highlight_json_line(content, theme));

@@ -178,9 +178,7 @@ impl Widget for FilterBar<'_> {
         if let Some(ref err) = filter.error {
             spans.push(Span::styled(
                 format!("  \u{26a0} {}", err),
-                Style::new()
-                    .fg(theme.string.fg.unwrap_or(theme.fg_dim))
-                    .bg(theme.bg),
+                theme.error_style,
             ));
         } else {
             spans.push(Span::styled(

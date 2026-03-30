@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ratatui::layout::{Constraint, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, Row, Table};
 use ratatui::Frame;
@@ -160,27 +161,33 @@ impl View for TableView {
 
         let available_width = area.width as usize;
         let col_count = self.columns.len();
-        let col_width = (available_width / col_count).max(8);
+        // Reserve 3 chars per separator between columns (" │ ") when there are multiple columns.
+        let separator_total = if col_count > 1 { (col_count - 1) * 3 } else { 0 };
+        let col_width = ((available_width.saturating_sub(separator_total)) / col_count).max(8);
 
-        // Build header cells, appending a sort indicator to the active sort column.
-        let header_cells: Vec<Cell> = self
+        // Build header as a single line with separators between column labels.
+        let header_spans: Vec<Span> = self
             .columns
             .iter()
             .enumerate()
-            .map(|(col_idx, c)| {
+            .flat_map(|(col_idx, c)| {
                 let label = if self.sort_column == Some(col_idx) {
                     let indicator = if self.sort_ascending { " \u{25b2}" } else { " \u{25bc}" };
                     format!("{}{}", c, indicator)
                 } else {
                     c.to_string()
                 };
-                Cell::from(Span::styled(
-                    label,
-                    theme.toolbar_brand_style,
-                ))
+                // Pad/truncate label to col_width.
+                let display = pad_or_truncate(&label, col_width);
+                let mut parts: Vec<Span> = Vec::new();
+                if col_idx > 0 {
+                    parts.push(Span::styled(" \u{2502} ", theme.tree_guide_style));
+                }
+                parts.push(Span::styled(display, theme.toolbar_brand_style));
+                parts
             })
             .collect();
-        let header = Row::new(header_cells)
+        let header = Row::new(vec![Cell::from(Line::from(header_spans))])
             .style(theme.toolbar_active_style)
             .height(1);
 
@@ -192,9 +199,19 @@ impl View for TableView {
             .map(|i| {
                 let is_selected = i == self.scroll.selected;
                 let orig = self.sorted_indices[i];
-                let cells: Vec<Cell> = self.rows[orig]
+
+                let row_style: Style = if is_selected {
+                    theme.selection_style
+                } else if (i % 2) == 1 {
+                    theme.alt_row_bg
+                } else {
+                    theme.bg_style
+                };
+
+                let spans: Vec<Span> = self.rows[orig]
                     .iter()
-                    .map(|cell_val| {
+                    .enumerate()
+                    .flat_map(|(col_idx, cell_val)| {
                         let text = cell_val.as_deref().unwrap_or("\u{2014}");
                         let max_chars = col_width.saturating_sub(2);
                         let truncated = if text.chars().count() > max_chars {
@@ -203,25 +220,21 @@ impl View for TableView {
                         } else {
                             text.to_string()
                         };
-                        Cell::from(Span::styled(truncated, theme.fg_style))
+                        let display = pad_or_truncate(&truncated, col_width);
+                        let mut parts: Vec<Span> = Vec::new();
+                        if col_idx > 0 {
+                            parts.push(Span::styled(" \u{2502} ", theme.tree_guide_style));
+                        }
+                        parts.push(Span::styled(display, theme.fg_style));
+                        parts
                     })
                     .collect();
 
-                let style = if is_selected {
-                    theme.selection_style
-                } else {
-                    theme.bg_style
-                };
-
-                Row::new(cells).style(style)
+                Row::new(vec![Cell::from(Line::from(spans))]).style(row_style)
             })
             .collect();
 
-        let widths: Vec<Constraint> = self
-            .columns
-            .iter()
-            .map(|_| Constraint::Min(col_width as u16))
-            .collect();
+        let widths = vec![Constraint::Min(available_width as u16)];
 
         let table = Table::new(data_rows, widths)
             .header(header)
@@ -337,6 +350,19 @@ fn build_table(
         .collect();
 
     (column_set, rows)
+}
+
+/// Pad a string with spaces to `width` chars, or truncate with ellipsis if longer.
+fn pad_or_truncate(s: &str, width: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count >= width {
+        if width == 0 {
+            return String::new();
+        }
+        format!("{}\u{2026}", crate::util::truncate_chars(s, width.saturating_sub(1)))
+    } else {
+        format!("{}{}", s, " ".repeat(width - char_count))
+    }
 }
 
 fn value_preview(doc: &JsonDocument, id: NodeId) -> String {

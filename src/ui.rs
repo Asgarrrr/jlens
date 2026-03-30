@@ -33,7 +33,11 @@ pub fn render_toolbar(
         theme.toolbar_bg_style,
     ));
 
-    for mode in ViewMode::ALL {
+    let modes: &[ViewMode] = &ViewMode::ALL;
+    for (i, &mode) in modes.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" │ ", theme.tree_guide_style));
+        }
         let is_active = mode == active_mode;
         let label = format!(" {}: {} ", mode.shortcut(), mode.label());
 
@@ -44,7 +48,15 @@ pub fn render_toolbar(
         }
     }
 
-    // Fill remaining width
+    // Right-align "? Help" hint
+    let used_width: usize = spans.iter().map(|s| crate::util::display_width(&s.content)).sum();
+    let help_text = "? Help ";
+    let help_width = crate::util::display_width(help_text);
+    let total_width = area.width as usize;
+    let padding = total_width.saturating_sub(used_width + help_width);
+    spans.push(Span::styled(" ".repeat(padding), theme.toolbar_bg_style));
+    spans.push(Span::styled(help_text, theme.fg_dim_style));
+
     let line = Line::from(spans).style(theme.toolbar_bg_style);
     let paragraph = ratatui::widgets::Paragraph::new(line);
     frame.render_widget(paragraph, area);
@@ -166,7 +178,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         ("?", "Toggle this help"),
     ];
 
-    let content_height = help_lines.len() as u16 + 2; // +2 for borders
+    let content_height = help_lines.len() as u16 + 2 + 2; // +2 borders, +2 footer lines
     let content_width = 48u16;
 
     let x = area.x + area.width.saturating_sub(content_width) / 2;
@@ -181,7 +193,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
     // Clear the area behind the overlay
     frame.render_widget(Clear, overlay);
 
-    let lines: Vec<Line> = help_lines
+    let mut lines: Vec<Line> = help_lines
         .iter()
         .map(|(key, desc)| {
             if desc.is_empty() && !key.is_empty() {
@@ -203,6 +215,12 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
             }
         })
         .collect();
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Press ? or Esc to close",
+        theme.fg_dim_style,
+    )));
 
     let block = Block::default()
         .borders(Borders::ALL)
