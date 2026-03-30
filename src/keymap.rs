@@ -45,6 +45,9 @@ pub(crate) enum Action {
     // Finder
     OpenFinder,
 
+    // View menu
+    OpenViewMenu,
+
     // Global
     Quit,
     SwitchView(u8), // 1-5
@@ -136,9 +139,10 @@ impl Default for KeyMap {
             (KeyModifiers::NONE, Char('+'), PreviewGrow),
             (KeyModifiers::NONE, Char('-'), PreviewShrink),
             (KeyModifiers::SHIFT, Char('+'), PreviewGrow),
-            // Finder
+            // Finder + View menu
             (KeyModifiers::SHIFT, Char('@'), OpenFinder),
             (KeyModifiers::NONE, Char('@'), OpenFinder),
+            (KeyModifiers::NONE, Char('v'), OpenViewMenu),
             // Global
             (KeyModifiers::NONE, Char('q'), Quit),
             (KeyModifiers::CONTROL, Char('c'), Quit),
@@ -182,6 +186,7 @@ fn parse_action(name: &str) -> Option<Action> {
         "zoom_in" => Action::ZoomIn,
         "zoom_out" => Action::ZoomOut,
         "open_finder" => Action::OpenFinder,
+        "open_view_menu" => Action::OpenViewMenu,
         "toggle_preview" => Action::TogglePreview,
         "preview_grow" => Action::PreviewGrow,
         "preview_shrink" => Action::PreviewShrink,

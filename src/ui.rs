@@ -12,7 +12,7 @@ pub fn layout(area: Rect) -> [Rect; 3] {
     Layout::vertical([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)]).areas(area)
 }
 
-/// Build the main bordered block with tabs in the title and status in the footer.
+/// Build the main bordered block with view name in the title.
 pub fn build_main_block<'a>(
     active_mode: ViewMode,
     filter_active: bool,
@@ -20,32 +20,68 @@ pub fn build_main_block<'a>(
     document: &JsonDocument,
     theme: &'a Theme,
 ) -> Block<'a> {
-    // Title: tabs
+    let view_label = if filter_active {
+        "Filter"
+    } else {
+        active_mode.label()
+    };
+
     let mut title_spans = vec![
         Span::styled(" jlens ", theme.toolbar_brand_style),
-        Span::raw(" "),
+        Span::styled(format!(" {view_label} \u{25be} "), theme.toolbar_active_style),
     ];
-    for &mode in &ViewMode::ALL {
-        if mode == active_mode && !filter_active {
-            title_spans.push(Span::styled(format!(" \u{25cf} {} ", mode.label()), theme.toolbar_active_style));
-        } else {
-            title_spans.push(Span::styled(format!("  {}  ", mode.label()), theme.fg_dim_style));
-        }
-    }
 
     if !zoom_stack.is_empty() {
         let path = document.path_of(*zoom_stack.last().unwrap());
-        title_spans.push(Span::styled(format!(" zoom:{path} "), theme.fg_dim_style));
-    }
-
-    if filter_active {
-        title_spans.push(Span::styled(" \u{25cf} Filter ", theme.toolbar_active_style));
+        title_spans.push(Span::styled(format!(" {path} "), theme.fg_dim_style));
     }
 
     Block::bordered()
         .title(Line::from(title_spans))
         .border_style(theme.tree_guide_style)
         .style(theme.bg_style)
+}
+
+/// Render the view selection popup.
+pub fn render_view_menu(
+    frame: &mut Frame,
+    active_mode: ViewMode,
+    selected: usize,
+    area: Rect,
+    theme: &Theme,
+) {
+    use ratatui::widgets::{Clear, Paragraph};
+
+    let popup_w = 14u16;
+    let popup_h = ViewMode::ALL.len() as u16 + 2;
+    let popup_x = area.x + 8; // after "jlens "
+    let popup_y = area.y + 1; // below the border
+    let popup = Rect::new(popup_x, popup_y, popup_w, popup_h);
+
+    frame.render_widget(Clear, popup);
+
+    let block = Block::bordered()
+        .border_style(theme.tree_guide_style)
+        .style(theme.bg_style);
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let lines: Vec<Line> = ViewMode::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, &mode)| {
+            let is_active = mode == active_mode;
+            let is_selected = i == selected;
+            let icon = if is_active { "\u{25cf}" } else { " " };
+            let bg = if is_selected { theme.selection_style } else { theme.bg_style };
+            Line::from(vec![
+                Span::styled(format!(" {icon} "), if is_active { theme.toolbar_active_style } else { bg }),
+                Span::styled(format!("{} ", mode.label()), bg),
+            ]).style(bg)
+        })
+        .collect();
+
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 

@@ -71,6 +71,8 @@ struct App {
     preview_pct: u16,
     preview_cache: Option<(NodeId, crate::preview::PreviewContent)>,
     finder: crate::finder::FinderState,
+    show_view_menu: bool,
+    view_menu_idx: usize,
     /// Cached serde_json::Value for filter live preview (avoids rebuild per keystroke).
     filter_value_cache: Option<serde_json::Value>,
     /// Cached field names for filter suggestions.
@@ -108,6 +110,8 @@ impl App {
             preview_pct: 50,
             preview_cache: None,
             finder: crate::finder::FinderState::new(),
+            show_view_menu: false,
+            view_menu_idx: 0,
             filter_value_cache: None,
             filter_fields_cache: None,
         }
@@ -557,6 +561,10 @@ fn run_app(
                     filter::render_filter_suggestions(frame, &app.filter, filter_area, &app.theme);
                 }
 
+                if app.show_view_menu {
+                    ui::render_view_menu(frame, app.active_mode, app.view_menu_idx, main_area_full, &app.theme);
+                }
+
                 if app.show_help {
                     ui::render_help_overlay(frame, frame.area(), &app.theme);
                 }
@@ -615,6 +623,32 @@ fn run_app(
 fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
     if app.show_help {
         app.show_help = false;
+        return;
+    }
+
+    // View menu modal
+    if app.show_view_menu {
+        use crossterm::event::KeyCode;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('v') => app.show_view_menu = false,
+            KeyCode::Down | KeyCode::Char('j') => {
+                app.view_menu_idx = (app.view_menu_idx + 1) % ViewMode::ALL.len();
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                app.view_menu_idx = if app.view_menu_idx == 0 {
+                    ViewMode::ALL.len() - 1
+                } else {
+                    app.view_menu_idx - 1
+                };
+            }
+            KeyCode::Enter => {
+                let mode = ViewMode::ALL[app.view_menu_idx];
+                app.ensure_view(mode);
+                app.active_mode = mode;
+                app.show_view_menu = false;
+            }
+            _ => {}
+        }
         return;
     }
 
@@ -825,6 +859,13 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
         Action::OpenFilter => ViewAction::OpenFilter,
         Action::OpenFinder => {
             app.finder.open(&app.document, app.effective_root());
+            ViewAction::None
+        }
+        Action::OpenViewMenu => {
+            app.show_view_menu = !app.show_view_menu;
+            if app.show_view_menu {
+                app.view_menu_idx = ViewMode::ALL.iter().position(|&m| m == app.active_mode).unwrap_or(0);
+            }
             ViewAction::None
         }
         Action::ZoomIn => {
