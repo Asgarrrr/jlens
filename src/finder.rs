@@ -157,7 +157,7 @@ fn value_preview(node: &crate::model::node::JsonNode) -> String {
         JsonValue::Number(n) => n.to_string(),
         JsonValue::String(s) => {
             if s.len() > 30 {
-                format!("\"{}...\"", &s[..27])
+                format!("\"{}...\"", crate::util::truncate_chars(s, 27))
             } else {
                 format!("\"{}\"", s)
             }
@@ -276,14 +276,19 @@ pub(crate) fn render_overlay(
 
         let path_display = if path.len() as u16 > inner.width / 2 {
             let max = (inner.width / 2 - 3) as usize;
-            format!("...{}", &path[path.len().saturating_sub(max)..])
+            let skip = path.char_indices()
+                .rev()
+                .nth(max.min(path.chars().count()))
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            format!("...{}", &path[skip..])
         } else {
             path.clone()
         };
 
-        let val_width = inner.width as usize - path_display.len() - 3;
+        let val_width = inner.width as usize - crate::util::display_width(&path_display) - 3;
         let val_display = if value.len() > val_width {
-            format!("{}...", &value[..val_width.saturating_sub(3)])
+            format!("{}...", crate::util::truncate_chars(value, val_width.saturating_sub(3)))
         } else {
             value.clone()
         };

@@ -32,7 +32,7 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 - Array of numbers → sparkline chart with min/max/avg
 - Array of objects → auto-table preview (first 10 rows)
 - Array of strings → scrollable list
-- String → detect URL, ISO date, base64, embedded JSON
+- String → detect URL, ISO date, embedded JSON
 - Object → key summary with types
 
 Resize with `+`/`-`.
@@ -43,7 +43,7 @@ Resize with `+`/`-`.
 
 **Export** (`Ctrl+S`) — export the selected subtree or full document to a file
 
-**Lazy loading** — files over 500 MB are shallow-parsed via mmap. Expand sections on demand without loading the entire file into memory.
+**Lazy loading** — all files are shallow-parsed via mmap with progressive expansion on demand.
 
 ## Performance
 

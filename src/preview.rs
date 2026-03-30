@@ -248,7 +248,7 @@ fn value_preview(doc: &JsonDocument, id: NodeId) -> String {
         JsonValue::Number(n) => n.to_string(),
         JsonValue::String(s) => {
             if s.len() > 40 {
-                format!("\"{}...\"", &s[..37])
+                format!("\"{}...\"", crate::util::truncate_chars(s, 37))
             } else {
                 format!("\"{}\"", s)
             }
@@ -359,7 +359,7 @@ pub(crate) fn render(
                 theme.fg_dim_style,
             )));
             for (i, item) in items.iter().enumerate() {
-                let truncated = if item.len() > 80 { &item[..77] } else { item };
+                let truncated = if item.len() > 80 { crate::util::truncate_chars(item, 77) } else { item };
                 lines.push(Line::from(vec![
                     Span::styled(format!(" [{:>3}] ", i), theme.fg_dim_style),
                     Span::styled(truncated, theme.string),

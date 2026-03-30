@@ -293,7 +293,7 @@ impl TreeView {
     }
 
     fn expand_all(&mut self) {
-        self.expand_subtree_iterative(self.document.root());
+        self.expand_subtree_iterative(self.display_root);
         self.dirty = true;
         self.rebuild_visible_rows();
     }
@@ -326,7 +326,7 @@ impl TreeView {
 
     fn collapse_all(&mut self) {
         self.expanded.clear();
-        self.expanded.insert(self.document.root());
+        self.expanded.insert(self.display_root);
         self.selected = 0;
         self.dirty = true;
         self.rebuild_visible_rows();
