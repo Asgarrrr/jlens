@@ -35,10 +35,10 @@ impl SchemaNode {
     }
 
     fn presence_pct(&self, parent_total: usize) -> u8 {
-        if parent_total == 0 {
+        if parent_total == 0 || self.total_seen >= parent_total {
             return 100;
         }
-        ((self.total_seen as f64 / parent_total as f64) * 100.0) as u8
+        ((self.total_seen as f64 / parent_total as f64) * 100.0).min(100.0) as u8
     }
 }
 
