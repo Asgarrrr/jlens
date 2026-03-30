@@ -1,7 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
@@ -104,22 +103,10 @@ impl Widget for ExportBar<'_> {
         let theme = self.theme;
 
         let spans = vec![
-            Span::styled(
-                " Export: ",
-                theme.toolbar_brand_style,
-            ),
-            Span::styled(
-                export.filename.as_str(),
-                theme.fg_style,
-            ),
-            Span::styled(
-                "\u{2588}",
-                Style::new().fg(theme.toolbar_active_style.bg.unwrap_or(theme.fg)).bg(theme.bg),
-            ),
-            Span::styled(
-                "  [Enter] save  [Esc] cancel",
-                theme.fg_dim_style,
-            ),
+            Span::styled(" Export: ", theme.toolbar_brand_style),
+            Span::styled(export.filename.as_str(), theme.fg_style),
+            Span::styled("\u{2588}", theme.input_cursor_style),
+            Span::styled("  [Enter] save  [Esc] cancel", theme.fg_dim_style),
         ];
 
         let line = Line::from(spans);

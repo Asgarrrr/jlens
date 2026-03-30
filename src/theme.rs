@@ -34,6 +34,9 @@ pub struct Theme {
     pub toolbar_active_style: Style,
     pub toolbar_inactive_style: Style,
 
+    // Input cursor (block char in search/export/filter bars)
+    pub input_cursor_style: Style,
+
     // Status bar
     pub status_style: Style,
     pub status_fg_style: Style,
@@ -93,9 +96,14 @@ impl Theme {
         let flash_fg = Color::Rgb(30, 30, 46);
 
         Self {
-            bg, fg, fg_dim, selection_bg,
+            bg,
+            fg,
+            fg_dim,
+            selection_bg,
 
-            key: Style::new().fg(Color::Rgb(137, 180, 250)).add_modifier(Modifier::BOLD),
+            key: Style::new()
+                .fg(Color::Rgb(137, 180, 250))
+                .add_modifier(Modifier::BOLD),
             string: Style::new().fg(Color::Rgb(166, 227, 161)),
             number: Style::new().fg(Color::Rgb(250, 179, 135)),
             boolean: Style::new().fg(Color::Rgb(203, 166, 247)),
@@ -110,9 +118,13 @@ impl Theme {
             tree_guide_style: Style::new().fg(tree_guide),
 
             toolbar_bg_style: Style::new().bg(toolbar_bg),
-            toolbar_brand_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg).add_modifier(Modifier::BOLD),
+            toolbar_brand_style: Style::new()
+                .fg(toolbar_active_fg)
+                .bg(toolbar_active_bg)
+                .add_modifier(Modifier::BOLD),
             toolbar_active_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg),
             toolbar_inactive_style: Style::new().fg(toolbar_fg).bg(toolbar_bg),
+            input_cursor_style: Style::new().fg(toolbar_active_bg).bg(bg),
 
             status_style: Style::new().bg(status_bg),
             status_fg_style: Style::new().fg(status_fg).bg(status_bg),
@@ -120,8 +132,13 @@ impl Theme {
 
             flash_style: Style::new().fg(flash_fg).bg(flash_bg),
 
-            search_match: Style::new().bg(Color::Rgb(249, 226, 175)).fg(Color::Rgb(30, 30, 46)),
-            search_current: Style::new().bg(Color::Rgb(250, 179, 135)).fg(Color::Rgb(30, 30, 46)).add_modifier(Modifier::BOLD),
+            search_match: Style::new()
+                .bg(Color::Rgb(249, 226, 175))
+                .fg(Color::Rgb(30, 30, 46)),
+            search_current: Style::new()
+                .bg(Color::Rgb(250, 179, 135))
+                .fg(Color::Rgb(30, 30, 46))
+                .add_modifier(Modifier::BOLD),
 
             diff_added: Style::new().fg(Color::Rgb(166, 227, 161)),
             diff_removed: Style::new().fg(Color::Rgb(243, 139, 168)),
@@ -141,7 +158,9 @@ impl Theme {
             scrollbar_thumb_style: Style::new().fg(fg_dim),
             scrollbar_track_style: Style::new().fg(tree_guide),
             help_border_style: Style::new().fg(tree_guide),
-            help_title_style: Style::new().fg(toolbar_active_bg).add_modifier(Modifier::BOLD),
+            help_title_style: Style::new()
+                .fg(toolbar_active_bg)
+                .add_modifier(Modifier::BOLD),
         }
     }
 
@@ -162,9 +181,14 @@ impl Theme {
         let flash_fg = Color::Rgb(239, 241, 245);
 
         Self {
-            bg, fg, fg_dim, selection_bg,
+            bg,
+            fg,
+            fg_dim,
+            selection_bg,
 
-            key: Style::new().fg(Color::Rgb(30, 102, 245)).add_modifier(Modifier::BOLD),
+            key: Style::new()
+                .fg(Color::Rgb(30, 102, 245))
+                .add_modifier(Modifier::BOLD),
             string: Style::new().fg(Color::Rgb(64, 160, 43)),
             number: Style::new().fg(Color::Rgb(254, 100, 11)),
             boolean: Style::new().fg(Color::Rgb(136, 57, 239)),
@@ -179,9 +203,13 @@ impl Theme {
             tree_guide_style: Style::new().fg(tree_guide),
 
             toolbar_bg_style: Style::new().bg(toolbar_bg),
-            toolbar_brand_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg).add_modifier(Modifier::BOLD),
+            toolbar_brand_style: Style::new()
+                .fg(toolbar_active_fg)
+                .bg(toolbar_active_bg)
+                .add_modifier(Modifier::BOLD),
             toolbar_active_style: Style::new().fg(toolbar_active_fg).bg(toolbar_active_bg),
             toolbar_inactive_style: Style::new().fg(toolbar_fg).bg(toolbar_bg),
+            input_cursor_style: Style::new().fg(toolbar_active_bg).bg(bg),
 
             status_style: Style::new().bg(status_bg),
             status_fg_style: Style::new().fg(status_fg).bg(status_bg),
@@ -189,8 +217,13 @@ impl Theme {
 
             flash_style: Style::new().fg(flash_fg).bg(flash_bg),
 
-            search_match: Style::new().bg(Color::Rgb(223, 142, 29)).fg(Color::Rgb(239, 241, 245)),
-            search_current: Style::new().bg(Color::Rgb(254, 100, 11)).fg(Color::Rgb(239, 241, 245)).add_modifier(Modifier::BOLD),
+            search_match: Style::new()
+                .bg(Color::Rgb(223, 142, 29))
+                .fg(Color::Rgb(239, 241, 245)),
+            search_current: Style::new()
+                .bg(Color::Rgb(254, 100, 11))
+                .fg(Color::Rgb(239, 241, 245))
+                .add_modifier(Modifier::BOLD),
 
             diff_added: Style::new().fg(Color::Rgb(64, 160, 43)),
             diff_removed: Style::new().fg(Color::Rgb(210, 15, 57)),
@@ -210,7 +243,9 @@ impl Theme {
             scrollbar_thumb_style: Style::new().fg(fg_dim),
             scrollbar_track_style: Style::new().fg(tree_guide),
             help_border_style: Style::new().fg(tree_guide),
-            help_title_style: Style::new().fg(toolbar_active_bg).add_modifier(Modifier::BOLD),
+            help_title_style: Style::new()
+                .fg(toolbar_active_bg)
+                .add_modifier(Modifier::BOLD),
         }
     }
 }

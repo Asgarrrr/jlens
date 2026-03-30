@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
@@ -27,7 +27,6 @@ pub(crate) enum SearchAction {
     None,
     Close,
     RunSearchAndClose,
-    CloseOnly,
     Navigate,
     QueryChanged,
     ToggleRegex,
@@ -91,7 +90,7 @@ impl SearchState {
                 if self.dirty {
                     SearchAction::RunSearchAndClose
                 } else {
-                    SearchAction::CloseOnly
+                    SearchAction::Close
                 }
             }
             (KeyModifiers::NONE, KeyCode::Backspace) => {
@@ -104,13 +103,11 @@ impl SearchState {
                 self.mark_dirty();
                 SearchAction::QueryChanged
             }
-            (KeyModifiers::CONTROL, KeyCode::Char('n'))
-            | (KeyModifiers::NONE, KeyCode::Down) => {
+            (KeyModifiers::CONTROL, KeyCode::Char('n')) | (KeyModifiers::NONE, KeyCode::Down) => {
                 self.next_hit();
                 SearchAction::Navigate
             }
-            (KeyModifiers::CONTROL, KeyCode::Char('p'))
-            | (KeyModifiers::NONE, KeyCode::Up) => {
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) | (KeyModifiers::NONE, KeyCode::Up) => {
                 self.prev_hit();
                 SearchAction::Navigate
             }
@@ -149,37 +146,24 @@ impl Widget for SearchBar<'_> {
             format!(" {}/{}", search.current_hit + 1, search.hits.len())
         };
 
-        let mut spans = vec![Span::styled(
-            " / ",
-            theme.toolbar_brand_style,
-        )];
+        let mut spans = vec![Span::styled(" / ", theme.toolbar_brand_style)];
 
-        // toolbar_active_bg is used as a highlight fg in these decorator spans
-        let accent_fg = theme.toolbar_active_style.bg.unwrap_or(theme.fg);
         if search.regex_mode {
             spans.push(Span::styled(
                 "[.*] ",
-                Style::new()
-                    .fg(accent_fg)
-                    .bg(theme.bg)
-                    .add_modifier(Modifier::BOLD),
+                theme.input_cursor_style.add_modifier(Modifier::BOLD),
             ));
         }
 
-        let hit_info_style = if no_matches { theme.error_style } else { theme.fg_dim_style };
+        let hit_info_style = if no_matches {
+            theme.error_style
+        } else {
+            theme.fg_dim_style
+        };
         spans.extend([
-            Span::styled(
-                search.query.as_str(),
-                theme.fg_style,
-            ),
-            Span::styled(
-                "\u{2588}",
-                Style::new().fg(accent_fg).bg(theme.bg),
-            ),
-            Span::styled(
-                hit_info,
-                hit_info_style,
-            ),
+            Span::styled(search.query.as_str(), theme.fg_style),
+            Span::styled("\u{2588}", theme.input_cursor_style),
+            Span::styled(hit_info, hit_info_style),
         ]);
 
         let line = Line::from(spans);

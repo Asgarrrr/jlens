@@ -11,9 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::{Constraint, Layout, Rect};
 
 use crate::event::AppEvent;
 use crate::keymap::{Action, KeyMap};
@@ -106,7 +106,9 @@ impl App {
 
     /// Expand a lazy stub node, updating the document and views.
     fn expand_lazy_stub(&mut self, stub_id: NodeId) {
-        let Some(ref mut lazy) = self.lazy_doc else { return };
+        let Some(ref mut lazy) = self.lazy_doc else {
+            return;
+        };
 
         if let Err(e) = lazy.expand_node(stub_id) {
             self.flash_message = Some((format!("Expand failed: {}", e), 18));
@@ -206,7 +208,10 @@ impl App {
 
     fn run_search(&mut self) {
         self.search.dirty = false;
-        let opts = SearchOptions { regex_mode: self.search.regex_mode, ..Default::default() };
+        let opts = SearchOptions {
+            regex_mode: self.search.regex_mode,
+            ..Default::default()
+        };
         self.search.hits = search_mod::search(&self.document, &self.search.query, &opts);
         self.search.current_hit = 0;
 
@@ -240,7 +245,11 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
             let document = Arc::new(lazy.to_document());
             run_with_document(document, Some(lazy), theme)
         }
-        Err(crate::parser::ParseError::Syntax { line, column, message }) => {
+        Err(crate::parser::ParseError::Syntax {
+            line,
+            column,
+            message,
+        }) => {
             eprintln!(
                 "\x1b[1;31merror\x1b[0m: invalid JSON in \x1b[1m{}\x1b[0m",
                 path.display()
@@ -250,16 +259,17 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
 
             // Try to show the offending line from the file
             if let Ok(content) = std::fs::read_to_string(path)
-                && let Some(error_line) = content.lines().nth(line.saturating_sub(1)) {
-                    eprintln!();
-                    eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", line, error_line);
-                    if column > 0 {
-                        eprintln!(
-                            "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
-                            " ".repeat(column.saturating_sub(1))
-                        );
-                    }
+                && let Some(error_line) = content.lines().nth(line.saturating_sub(1))
+            {
+                eprintln!();
+                eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", line, error_line);
+                if column > 0 {
+                    eprintln!(
+                        "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
+                        " ".repeat(column.saturating_sub(1))
+                    );
                 }
+            }
             std::process::exit(1);
         }
         Err(e) => Err(e).with_context(|| format!("Failed to open {}", path.display())),
@@ -278,9 +288,7 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
     let value: serde_json::Value = match serde_json::from_str(&buf) {
         Ok(v) => v,
         Err(err) => {
-            eprintln!(
-                "\x1b[1;31merror\x1b[0m: invalid JSON from stdin"
-            );
+            eprintln!("\x1b[1;31merror\x1b[0m: invalid JSON from stdin");
             eprintln!("  --> line {}, column {}", err.line(), err.column());
             eprintln!("  {}", err);
             if let Some(error_line) = buf.lines().nth(err.line().saturating_sub(1)) {
@@ -299,12 +307,8 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
     let parse_time = start.elapsed();
 
     let source_size = buf.len() as u64;
-    let document = crate::model::node::DocumentBuilder::from_serde_value(
-        value,
-        None,
-        source_size,
-        parse_time,
-    );
+    let document =
+        crate::model::node::DocumentBuilder::from_serde_value(value, None, source_size, parse_time);
     run_with_document(Arc::new(document), None, theme)
 }
 
@@ -332,95 +336,97 @@ fn run_app(
         if app.needs_redraw {
             app.needs_redraw = false;
             terminal.draw(|frame| {
-            let [toolbar, main_area_full, status] = ui::layout(frame.area());
+                let [toolbar, main_area_full, status] = ui::layout(frame.area());
 
-            // Reserve 1 line at the bottom of the main area for search, export, or filter bar.
-            let needs_bottom_bar =
-                app.search.active || app.export.active || app.filter.active;
-            let (main_area, bottom_bar) = if needs_bottom_bar {
-                let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
-                    .areas(main_area_full);
-                (main, Some(bar))
-            } else {
-                (main_area_full, None)
-            };
+                // Reserve 1 line at the bottom of the main area for search, export, or filter bar.
+                let needs_bottom_bar = app.search.active || app.export.active || app.filter.active;
+                let (main_area, bottom_bar) = if needs_bottom_bar {
+                    let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
+                        .areas(main_area_full);
+                    (main, Some(bar))
+                } else {
+                    (main_area_full, None)
+                };
 
-            app.last_main_area = main_area;
-            app.last_status_area = status;
-            app.update_viewport_height(main_area.height as usize);
+                app.last_main_area = main_area;
+                app.last_status_area = status;
+                app.update_viewport_height(main_area.height as usize);
 
-            ui::render_toolbar(frame, toolbar, app.active_mode, &app.theme);
+                ui::render_toolbar(frame, toolbar, app.active_mode, &app.theme);
 
-            // If a filter result is showing, render it instead of the normal view.
-            if app.filter.showing_result {
-                if let Some(ref result_view) = app.filter.result_view {
-                    result_view.render(frame, main_area, &app.theme);
+                // If a filter result is showing, render it instead of the normal view.
+                if app.filter.showing_result {
+                    if let Some(ref result_view) = app.filter.result_view {
+                        result_view.render(frame, main_area, &app.theme);
+                    }
+                } else {
+                    app.active_view().render(frame, main_area, &app.theme);
                 }
-            } else {
-                app.active_view().render(frame, main_area, &app.theme);
-            }
 
-            // Bottom bar: filter input > search > export (mutually exclusive)
-            if app.filter.active {
-                if let Some(area) = bottom_bar {
+                // Bottom bar: filter input > search > export (mutually exclusive)
+                if app.filter.active {
+                    if let Some(area) = bottom_bar {
+                        frame.render_widget(
+                            filter::FilterBar {
+                                state: &app.filter,
+                                theme: &app.theme,
+                            },
+                            area,
+                        );
+                    }
+                } else if app.search.active {
+                    if let Some(area) = bottom_bar {
+                        frame.render_widget(
+                            search::SearchBar {
+                                state: &app.search,
+                                theme: &app.theme,
+                            },
+                            area,
+                        );
+                    }
+                } else if app.export.active
+                    && let Some(area) = bottom_bar
+                {
                     frame.render_widget(
-                        filter::FilterBar { state: &app.filter, theme: &app.theme },
+                        export::ExportBar {
+                            state: &app.export,
+                            theme: &app.theme,
+                        },
                         area,
                     );
                 }
-            } else if app.search.active {
-                if let Some(area) = bottom_bar {
-                    frame.render_widget(
-                        search::SearchBar { state: &app.search, theme: &app.theme },
-                        area,
-                    );
-                }
-            } else if app.export.active
-                && let Some(area) = bottom_bar {
-                    frame.render_widget(
-                        export::ExportBar { state: &app.export, theme: &app.theme },
-                        area,
-                    );
-                }
 
-            let status_info = if app.filter.showing_result {
-                app.filter
-                    .result_view
+                let status_info = if app.filter.showing_result {
+                    app.filter
+                        .result_view
+                        .as_ref()
+                        .map(|v| v.status_info())
+                        .unwrap_or_else(|| crate::views::StatusInfo {
+                            cursor_path: "$".to_string(),
+                            extra: None,
+                        })
+                } else {
+                    app.active_view().status_info()
+                };
+                let metadata = app.document.metadata();
+                // Prepend filter indicator to flash message when showing results.
+                let filter_indicator: Option<String> = if app.filter.showing_result {
+                    Some(format!("[Filter: {}]", app.filter.query))
+                } else {
+                    None
+                };
+                let flash = app
+                    .flash_message
                     .as_ref()
-                    .map(|v| v.status_info())
-                    .unwrap_or_else(|| crate::views::StatusInfo {
-                        cursor_path: "$".to_string(),
-                        extra: None,
-                    })
-            } else {
-                app.active_view().status_info()
-            };
-            let metadata = app.document.metadata();
-            // Prepend filter indicator to flash message when showing results.
-            let filter_indicator: Option<String> = if app.filter.showing_result {
-                Some(format!("[Filter: {}]", app.filter.query))
-            } else {
-                None
-            };
-            let flash = app
-                .flash_message
-                .as_ref()
-                .map(|(msg, _)| msg.as_str())
-                .or(filter_indicator.as_deref());
-            ui::render_status_bar(
-                frame,
-                status,
-                &status_info,
-                metadata,
-                flash,
-                &app.theme,
-            );
+                    .map(|(msg, _)| msg.as_str())
+                    .or(filter_indicator.as_deref());
+                ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
 
-            // Help overlay (rendered last so it's on top)
-            if app.show_help {
-                ui::render_help_overlay(frame, frame.area(), &app.theme);
-            }
-        })?;
+                // Help overlay (rendered last so it's on top)
+                if app.show_help {
+                    ui::render_help_overlay(frame, frame.area(), &app.theme);
+                }
+            })?;
         }
 
         if app.should_quit {
@@ -472,11 +478,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         match app.filter.handle_input_key(key) {
             FilterAction::CloseInput => app.filter.close_input(),
             FilterAction::RunFilter => {
-                filter::run_filter(
-                    &mut app.filter,
-                    &app.document,
-                    app.last_viewport_height,
-                );
+                filter::run_filter(&mut app.filter, &app.document, app.last_viewport_height);
             }
             FilterAction::None
             | FilterAction::CloseResult
@@ -500,9 +502,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                     handle_action(app, view_action);
                 }
             }
-            FilterAction::None
-            | FilterAction::CloseInput
-            | FilterAction::RunFilter => {}
+            FilterAction::None | FilterAction::CloseInput | FilterAction::RunFilter => {}
         }
         return;
     }
@@ -520,7 +520,9 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                     app.tree_view.selected_node_id(),
                 );
                 let result = export::perform_export(&app.export.filename, &content);
-                let msg = match result { Ok(m) | Err(m) => m };
+                let msg = match result {
+                    Ok(m) | Err(m) => m,
+                };
                 app.flash_message = Some((msg, 60));
                 app.export.active = false;
             }
@@ -531,15 +533,13 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
 
     if app.search.active {
         match app.search.handle_key(key) {
-            SearchAction::Close | SearchAction::CloseOnly => app.search.close(),
+            SearchAction::Close => app.search.close(),
             SearchAction::RunSearchAndClose => {
                 app.run_search();
                 app.search.close();
             }
             SearchAction::Navigate => app.navigate_to_current_hit(),
-            SearchAction::QueryChanged
-            | SearchAction::ToggleRegex
-            | SearchAction::None => {}
+            SearchAction::QueryChanged | SearchAction::ToggleRegex | SearchAction::None => {}
         }
         return;
     }
@@ -585,10 +585,12 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 if let Some(node_id) = app.tree_view.selected_node_id() {
                     let path = app.document.path_of(node_id);
                     let ancestors = app.document.ancestors_of(node_id);
-                    if let Some(seg_idx) = ui::breadcrumb_hit_test(&path, mouse.column, status_area.x)
-                        && let Some(&target) = ancestors.get(seg_idx) {
-                            app.tree_view.navigate_to_node(target);
-                        }
+                    if let Some(seg_idx) =
+                        ui::breadcrumb_hit_test(&path, mouse.column, status_area.x)
+                        && let Some(&target) = ancestors.get(seg_idx)
+                    {
+                        app.tree_view.navigate_to_node(target);
+                    }
                 }
                 return;
             }
@@ -679,15 +681,15 @@ fn handle_action(app: &mut App, action: ViewAction) {
         }
         ViewAction::CopyToClipboard(text) => {
             if let Some(ref mut cb) = app.clipboard
-                && cb.set_text(&text).is_ok() {
-                    let preview = if text.chars().count() > 40 {
-                        format!("{}...", crate::util::truncate_chars(&text, 37))
-                    } else {
-                        text
-                    };
-                    app.flash_message = Some((format!("Copied: {}", preview), 45));
-                }
+                && cb.set_text(&text).is_ok()
+            {
+                let preview = if text.chars().count() > 40 {
+                    format!("{}...", crate::util::truncate_chars(&text, 37))
+                } else {
+                    text
+                };
+                app.flash_message = Some((format!("Copied: {}", preview), 45));
+            }
         }
     }
 }
-

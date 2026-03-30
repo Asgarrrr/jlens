@@ -4,15 +4,14 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
 use crate::model::node::{DocumentBuilder, JsonDocument};
 use crate::theme::Theme;
+use crate::views::View;
 use crate::views::raw;
 use crate::views::tree::TreeView;
-use crate::views::View;
 
 pub(crate) struct FilterState {
     pub(crate) active: bool,
@@ -161,19 +160,10 @@ impl Widget for FilterBar<'_> {
         let filter = self.state;
         let theme = self.theme;
 
-        let mut spans = vec![Span::styled(
-            " : ",
-            theme.toolbar_brand_style,
-        )];
+        let mut spans = vec![Span::styled(" : ", theme.toolbar_brand_style)];
 
-        spans.push(Span::styled(
-            filter.query.as_str(),
-            theme.fg_style,
-        ));
-        spans.push(Span::styled(
-            "\u{2588}",
-            Style::new().fg(theme.toolbar_active_style.bg.unwrap_or(theme.fg)).bg(theme.bg),
-        ));
+        spans.push(Span::styled(filter.query.as_str(), theme.fg_style));
+        spans.push(Span::styled("\u{2588}", theme.input_cursor_style));
 
         if let Some(ref err) = filter.error {
             spans.push(Span::styled(
