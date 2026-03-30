@@ -29,8 +29,8 @@ pub fn build_main_block<'a>(
     let mut title_spans = vec![
         Span::styled(" jlens", theme.fg_bold_style),
         Span::styled(" \u{2502} ", theme.tree_guide_style),
-        Span::styled(view_label, theme.fg_style),
-        Span::styled(" \u{25be} ", theme.fg_dim_style),
+        Span::styled(format!("{view_label} "), theme.fg_style),
+        Span::styled("v\u{25be} ", theme.fg_dim_style),
     ];
 
     if !zoom_stack.is_empty() {

@@ -549,16 +549,33 @@ fn run_app(
                     }
                 }
 
-                // Filter input replaces the Block's bottom border area
+                // Filter: its own bordered zone at the bottom of the inner area
                 if app.filter.active {
-                    let filter_area = Rect::new(
-                        main_area_full.x + 1,
-                        main_area_full.y + main_area_full.height.saturating_sub(1),
-                        main_area_full.width.saturating_sub(2),
-                        1,
-                    );
-                    filter::render_filter_input(frame, &app.filter, filter_area, &app.theme);
-                    filter::render_filter_suggestions(frame, &app.filter, filter_area, &app.theme);
+                    let filter_h = 3u16; // border + input + border
+                    let filter_y = inner.y + inner.height.saturating_sub(filter_h);
+                    let filter_block_area = Rect::new(inner.x, filter_y, inner.width, filter_h);
+
+                    let fblock = ratatui::widgets::Block::bordered()
+                        .title(ratatui::text::Line::from(vec![
+                            ratatui::text::Span::styled(" Filter ", app.theme.fg_bold_style),
+                            ratatui::text::Span::styled(
+                                if app.filter.count > 0 {
+                                    format!("{} results ", app.filter.count)
+                                } else if app.filter.error.is_some() {
+                                    "\u{26a0} error ".into()
+                                } else {
+                                    String::new()
+                                },
+                                app.theme.fg_dim_style,
+                            ),
+                        ]))
+                        .border_style(app.theme.tree_guide_style)
+                        .style(app.theme.bg_style);
+
+                    let filter_inner = fblock.inner(filter_block_area);
+                    frame.render_widget(fblock, filter_block_area);
+                    filter::render_filter_input(frame, &app.filter, filter_inner, &app.theme);
+                    filter::render_filter_suggestions(frame, &app.filter, filter_block_area, &app.theme);
                 }
 
                 if app.show_view_menu {
