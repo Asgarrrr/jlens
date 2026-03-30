@@ -6,7 +6,7 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 
 ## Features
 
-**6 view modes** — switch with `1`-`6` or the view menu (`v`):
+**7 view modes** — switch with `1`-`7` or the view menu (`v`):
 
 - **Tree** — collapsible tree with syntax highlighting, vim navigation, search highlighting
 - **Table** — auto-detected array-of-objects as sortable columns with zebra striping
@@ -14,6 +14,7 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 - **Paths** — every leaf value with its full JSON path
 - **Stats** — document overview, type distribution, depth analysis
 - **Schema** — inferred structure with types, presence percentages, and mixed-type detection
+- **Graph** — interactive visual graph with braille rendering, zoom/pan, node selection
 
 **Search** (`/`) — incremental regex-capable search with match highlighting and navigation
 
@@ -90,7 +91,7 @@ jlens --init                            # generate config file
 
 | Key | Action |
 |-----|--------|
-| `1`-`6` | Switch view (Tree, Table, Raw, Paths, Stats, Schema) |
+| `1`-`7` | Switch view (Tree, Table, Raw, Paths, Stats, Schema, Graph) |
 | `v` | View selector menu |
 | `p` | Toggle preview pane |
 | `+` / `-` | Resize preview |
