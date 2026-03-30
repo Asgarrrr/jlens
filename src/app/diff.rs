@@ -52,7 +52,7 @@ fn run_diff_app(
     theme: Theme,
 ) -> Result<()> {
     const TICK: Duration = Duration::from_millis(33);
-    let keymap = KeyMap::default_map();
+    let keymap = KeyMap::default();
     let mut needs_redraw = true;
     let mut show_help = false;
     let mut should_quit = false;
@@ -194,7 +194,7 @@ impl Widget for DiffStatusBar<'_> {
                 self.theme.status_style,
             ),
             Span::styled(
-                self.stats_str.to_string(),
+                self.stats_str,
                 self.theme.status_fg_style,
             ),
         ];

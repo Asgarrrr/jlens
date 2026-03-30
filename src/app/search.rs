@@ -167,7 +167,7 @@ impl Widget for SearchBar<'_> {
 
         spans.extend([
             Span::styled(
-                search.query.clone(),
+                search.query.as_str(),
                 theme.fg_style,
             ),
             Span::styled(

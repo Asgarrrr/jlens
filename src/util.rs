@@ -8,21 +8,6 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> &str {
     }
 }
 
-/// Truncate a string to fit within `max_width` terminal columns,
-/// respecting Unicode display widths.
-#[allow(dead_code)]
-pub fn truncate_display_width(s: &str, max_width: usize) -> &str {
-    let mut width = 0;
-    for (idx, ch) in s.char_indices() {
-        let ch_width = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + ch_width > max_width {
-            return &s[..idx];
-        }
-        width += ch_width;
-    }
-    s
-}
-
 /// Measure the display width of a string in terminal columns.
 pub fn display_width(s: &str) -> usize {
     UnicodeWidthStr::width(s)
@@ -40,6 +25,19 @@ pub fn digit_count(n: usize) -> usize {
         count += 1;
     }
     count
+}
+
+/// Format a number with thousand separators (e.g. 45231 → "45,231").
+pub fn format_count(n: usize) -> String {
+    let s = n.to_string();
+    let mut result = String::with_capacity(s.len() + s.len() / 3);
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result
 }
 
 /// Reusable vertical scroll state — eliminates duplicated navigation logic across views.
@@ -158,6 +156,20 @@ mod tests {
         assert_eq!(digit_count(999), 3);
         assert_eq!(digit_count(1000), 4);
         assert_eq!(digit_count(999_999_999), 9);
+    }
+
+    #[test]
+    fn format_count_small() {
+        assert_eq!(format_count(0), "0");
+        assert_eq!(format_count(42), "42");
+        assert_eq!(format_count(999), "999");
+    }
+
+    #[test]
+    fn format_count_thousands() {
+        assert_eq!(format_count(1000), "1,000");
+        assert_eq!(format_count(45231), "45,231");
+        assert_eq!(format_count(1000000), "1,000,000");
     }
 
     #[test]

@@ -26,10 +26,10 @@ where
         return Err(e.into());
     }
 
-    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<()> {
         let backend = CrosstermBackend::new(stdout());
-        let mut terminal = Terminal::new(backend).expect("failed to create terminal");
-        terminal.clear().expect("failed to clear terminal");
+        let mut terminal = Terminal::new(backend)?;
+        terminal.clear()?;
         f(&mut terminal)
     }));
 

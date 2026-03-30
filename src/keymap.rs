@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// Modal handlers (search bar, export bar, filter bar) bypass this
 /// layer since they handle text input directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
+pub(crate) enum Action {
     // Navigation (shared across views)
     MoveUp,
     MoveDown,
@@ -47,12 +47,22 @@ pub enum Action {
 /// The lookup is a simple linear scan over a sorted binding list.
 /// With ~40 bindings this is faster than HashMap (no hashing overhead)
 /// and trivially serializable for future config support.
-pub struct KeyMap {
+pub(crate) struct KeyMap {
     bindings: Vec<(KeyModifiers, KeyCode, Action)>,
 }
 
 impl KeyMap {
-    pub fn default_map() -> Self {
+    /// Look up the action for a key event. Returns `None` if unmapped.
+    pub fn resolve(&self, key: &KeyEvent) -> Option<Action> {
+        self.bindings
+            .iter()
+            .find(|(mods, code, _)| key.modifiers == *mods && key.code == *code)
+            .map(|&(_, _, action)| action)
+    }
+}
+
+impl Default for KeyMap {
+    fn default() -> Self {
         use Action::*;
         use KeyCode::*;
 
@@ -107,21 +117,5 @@ impl KeyMap {
         ];
 
         Self { bindings }
-    }
-
-    /// Look up the action for a key event. Returns `None` if unmapped.
-    pub fn resolve(&self, key: &KeyEvent) -> Option<Action> {
-        for &(mods, ref code, action) in &self.bindings {
-            if key.modifiers == mods && key.code == *code {
-                return Some(action);
-            }
-        }
-        None
-    }
-}
-
-impl Default for KeyMap {
-    fn default() -> Self {
-        Self::default_map()
     }
 }

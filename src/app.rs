@@ -76,7 +76,7 @@ impl App {
             document,
             theme,
             active_mode: ViewMode::Tree,
-            keymap: KeyMap::default_map(),
+            keymap: KeyMap::default(),
             tree_view,
             raw_view: None,
             table_view: None,
@@ -339,9 +339,9 @@ fn run_app(
             let needs_bottom_bar =
                 app.search.active || app.export.active || app.filter.active;
             let (main_area, bottom_bar) = if needs_bottom_bar {
-                let chunks = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
-                    .split(main_area_full);
-                (chunks[0], Some(chunks[1]))
+                let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
+                    .areas(main_area_full);
+                (main, Some(bar))
             } else {
                 (main_area_full, None)
             };
@@ -522,10 +522,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                     app.tree_view.selected_node_id(),
                 );
                 let result = export::perform_export(&app.export.filename, &content);
-                match result {
-                    Ok(msg) => app.flash_message = Some((msg, 60)),
-                    Err(msg) => app.flash_message = Some((msg, 60)),
-                }
+                let msg = match result { Ok(m) | Err(m) => m };
+                app.flash_message = Some((msg, 60));
                 app.export.active = false;
             }
             ExportAction::None => {}

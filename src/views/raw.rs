@@ -53,7 +53,7 @@ impl RawView {
 impl View for RawView {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let height = area.height as usize;
-        let gutter_width = digit_count(self.total_lines()) + 1;
+        let gutter_width = crate::util::digit_count(self.total_lines()) + 1;
 
         let start = self.scroll.offset;
         let end = (start + height).min(self.total_lines());
@@ -127,10 +127,6 @@ impl View for RawView {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn digit_count(n: usize) -> usize {
-    crate::util::digit_count(n)
-}
 
 /// Rebuild a `serde_json::Value` from our arena model (for pretty-printing).
 ///

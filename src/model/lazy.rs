@@ -30,9 +30,9 @@ pub struct LazyDocument {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 struct ByteRange {
     start: usize,
+    #[allow(dead_code)]
     end: usize,
 }
 
@@ -93,13 +93,13 @@ impl LazyDocument {
     }
 
     /// Check if a node is a stub with unparsed children.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn is_stub(&self, id: NodeId) -> bool {
         self.pending.contains_key(&id)
     }
 
     /// Returns `true` if there are any remaining unexpanded stubs.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn has_pending_stubs(&self) -> bool {
         !self.pending.is_empty()
     }
@@ -111,13 +111,12 @@ impl LazyDocument {
     /// Any containers found inside the expanded subtree that exceed
     /// `MAX_SHALLOW_DEPTH` relative to the stub are recorded as new stubs.
     pub fn expand_node(&mut self, stub_id: NodeId) -> Result<(), ParseError> {
-        let range = match self.pending.get(&stub_id) {
-            Some(r) => *r,
-            None => return Err(ParseError::Syntax {
+        let Some(&range) = self.pending.get(&stub_id) else {
+            return Err(ParseError::Syntax {
                 line: 0,
                 column: 0,
                 message: format!("node {} is not a stub", stub_id),
-            }),
+            });
         };
 
         let stub_depth = self.nodes[stub_id.index()].depth;

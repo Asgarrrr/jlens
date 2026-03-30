@@ -94,10 +94,10 @@ pub(crate) fn run_filter(
     document: &JsonDocument,
     viewport_height: usize,
 ) {
-    let query = filter.query.trim().to_string();
+    let query = filter.query.trim();
 
     // Parse
-    let expr = match crate::filter::parse::parse(&query) {
+    let expr = match crate::filter::parse::parse(query) {
         Ok(e) => e,
         Err(e) => {
             filter.error = Some(e.to_string());
@@ -167,7 +167,7 @@ impl Widget for FilterBar<'_> {
         )];
 
         spans.push(Span::styled(
-            filter.query.clone(),
+            filter.query.as_str(),
             theme.fg_style,
         ));
         spans.push(Span::styled(

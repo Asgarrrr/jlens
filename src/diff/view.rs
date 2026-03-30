@@ -194,7 +194,7 @@ impl DiffView {
         // Expand/collapse icon for containers
         if row.is_container {
             let icon = if row.is_expanded { "▼ " } else { "▶ " };
-            spans.push(Span::styled(icon.to_string(), theme.fg_style));
+            spans.push(Span::styled(icon, theme.fg_style));
         }
 
         // Key label
@@ -204,7 +204,7 @@ impl DiffView {
                 theme.key,
             ));
             spans.push(Span::styled(
-                ": ".to_string(),
+                ": ",
                 theme.fg_dim_style,
             ));
         }
@@ -224,23 +224,23 @@ impl DiffView {
             let child_count = node.children.len();
             match (&row.left, &row.right) {
                 (Some(serde_json::Value::Object(_)), _) | (_, Some(serde_json::Value::Object(_))) => {
-                    spans.push(Span::styled("{".to_string(), theme.bracket));
+                    spans.push(Span::styled("{", theme.bracket));
                     if !row.is_expanded {
                         spans.push(Span::styled(
                             format!("{} keys", child_count),
                             theme.fg_dim_style,
                         ));
-                        spans.push(Span::styled("}".to_string(), theme.bracket));
+                        spans.push(Span::styled("}", theme.bracket));
                     }
                 }
                 _ => {
-                    spans.push(Span::styled("[".to_string(), theme.bracket));
+                    spans.push(Span::styled("[", theme.bracket));
                     if !row.is_expanded {
                         spans.push(Span::styled(
                             format!("{} items", child_count),
                             theme.fg_dim_style,
                         ));
-                        spans.push(Span::styled("]".to_string(), theme.bracket));
+                        spans.push(Span::styled("]", theme.bracket));
                     }
                 }
             }
@@ -266,7 +266,7 @@ impl DiffView {
                         spans.push(Span::styled(value_display(lv), theme.diff_removed));
                     }
                     spans.push(Span::styled(
-                        " → ".to_string(),
+                        " → ",
                         theme.fg_dim_style,
                     ));
                     if let Some(ref rv) = row.right {

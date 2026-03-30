@@ -606,11 +606,6 @@ impl View for TreeView {
 }
 
 impl TreeView {
-    #[allow(dead_code)]
-    pub fn document(&self) -> &JsonDocument {
-        &self.document
-    }
-
     /// Navigate to a specific node, expanding all ancestors and scrolling to it.
     pub fn navigate_to_node(&mut self, target: NodeId) {
         // Expand all ancestors from root to target

@@ -109,7 +109,7 @@ impl Widget for ExportBar<'_> {
                 theme.toolbar_brand_style,
             ),
             Span::styled(
-                export.filename.clone(),
+                export.filename.as_str(),
                 theme.fg_style,
             ),
             Span::styled(

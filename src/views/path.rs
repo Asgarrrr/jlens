@@ -13,8 +13,6 @@ use crate::views::{StatusInfo, View, ViewAction};
 /// Flattened path view: shows all leaf values with their full JSON path.
 /// e.g. `$.users[0].name = "Alice"`
 pub struct PathView {
-    #[allow(dead_code)]
-    document: Arc<JsonDocument>,
     entries: Vec<PathEntry>,
     scroll: crate::util::ScrollState,
 }
@@ -22,8 +20,6 @@ pub struct PathView {
 struct PathEntry {
     path: String,
     value: String,
-    #[allow(dead_code)]
-    node_id: NodeId,
 }
 
 impl PathView {
@@ -32,7 +28,6 @@ impl PathView {
         collect_leaves(&document, document.root(), "$".to_string(), &mut entries);
 
         Self {
-            document,
             entries,
             scroll: crate::util::ScrollState::new(),
         }
@@ -63,13 +58,13 @@ impl View for PathView {
                 let is_selected = i == self.scroll.selected;
 
                 let spans = vec![
-                    Span::styled(entry.path.clone(), theme.key),
+                    Span::styled(entry.path.as_str(), theme.key),
                     Span::styled(
-                        " = ".to_string(),
+                        " = ",
                         theme.fg_dim_style,
                     ),
                     Span::styled(
-                        entry.value.clone(),
+                        entry.value.as_str(),
                         theme.style_for_leaf_value(&entry.value),
                     ),
                 ];
@@ -173,7 +168,6 @@ fn collect_leaves(doc: &JsonDocument, root: NodeId, root_path: String, out: &mut
                 out.push(PathEntry {
                     path,
                     value,
-                    node_id: id,
                 });
             }
         }

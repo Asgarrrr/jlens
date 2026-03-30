@@ -12,13 +12,13 @@ use crate::model::node::NodeId;
 use crate::theme::Theme;
 
 /// Information displayed in the status bar, provided by the active view.
-pub struct StatusInfo {
-    pub cursor_path: String,
-    pub extra: Option<String>,
+pub(crate) struct StatusInfo {
+    pub(crate) cursor_path: String,
+    pub(crate) extra: Option<String>,
 }
 
 /// Actions returned by views to communicate intent to the app layer.
-pub enum ViewAction {
+pub(crate) enum ViewAction {
     None,
     Quit,
     SwitchView(ViewMode),
@@ -35,7 +35,7 @@ pub enum ViewAction {
 
 /// Available visualization modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ViewMode {
+pub(crate) enum ViewMode {
     Tree,
     Table,
     Raw,
@@ -44,7 +44,7 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
-    pub const ALL: [ViewMode; 5] = [
+    pub(crate) const ALL: [ViewMode; 5] = [
         ViewMode::Tree,
         ViewMode::Table,
         ViewMode::Raw,
@@ -52,7 +52,7 @@ impl ViewMode {
         ViewMode::Stats,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             ViewMode::Tree => "Tree",
             ViewMode::Table => "Table",
@@ -62,7 +62,7 @@ impl ViewMode {
         }
     }
 
-    pub fn shortcut(self) -> char {
+    pub(crate) fn shortcut(self) -> char {
         match self {
             ViewMode::Tree => '1',
             ViewMode::Table => '2',
@@ -74,7 +74,7 @@ impl ViewMode {
 }
 
 /// Trait implemented by all visualization modes.
-pub trait View {
+pub(crate) trait View {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme);
     fn handle_action(&mut self, action: Action) -> ViewAction;
     fn status_info(&self) -> StatusInfo;

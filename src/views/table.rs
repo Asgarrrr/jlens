@@ -13,10 +13,6 @@ use crate::views::{StatusInfo, View, ViewAction};
 /// Table view for arrays of objects.
 /// Auto-discovers columns from the first N objects and renders them as a sortable table.
 pub struct TableView {
-    #[allow(dead_code)]
-    document: Arc<JsonDocument>,
-    #[allow(dead_code)]
-    array_node: Option<NodeId>,
     columns: Vec<Arc<str>>,
     rows: Vec<Vec<Option<String>>>,
     scroll: crate::util::ScrollState,
@@ -30,7 +26,6 @@ pub struct TableView {
 /// Result of searching for table-compatible data in the document.
 enum TableData {
     Found {
-        array_node: NodeId,
         columns: Vec<Arc<str>>,
         rows: Vec<Vec<Option<String>>>,
     },
@@ -46,11 +41,7 @@ fn find_table_data(doc: &JsonDocument) -> TableData {
     if let JsonValue::Array(children) = &root_node.value {
         if is_array_of_objects(doc, children) {
             let (columns, rows) = build_table(doc, children);
-            return TableData::Found {
-                array_node: root,
-                columns,
-                rows,
-            };
+            return TableData::Found { columns, rows };
         }
     }
 
@@ -61,11 +52,7 @@ fn find_table_data(doc: &JsonDocument) -> TableData {
             if let JsonValue::Array(children) = &child.value {
                 if is_array_of_objects(doc, children) {
                     let (columns, rows) = build_table(doc, children);
-                    return TableData::Found {
-                        array_node: *child_id,
-                        columns,
-                        rows,
-                    };
+                    return TableData::Found { columns, rows };
                 }
             }
         }
@@ -81,15 +68,9 @@ impl TableView {
         let data = find_table_data(&document);
 
         match data {
-            TableData::Found {
-                array_node,
-                columns,
-                rows,
-            } => {
+            TableData::Found { columns, rows } => {
                 let sorted_indices = (0..rows.len()).collect();
                 Self {
-                    document,
-                    array_node: Some(array_node),
                     columns,
                     rows,
                     scroll: crate::util::ScrollState::new(),
@@ -100,8 +81,6 @@ impl TableView {
                 }
             }
             TableData::NotFound(msg) => Self {
-                document,
-                array_node: None,
                 columns: Vec::new(),
                 rows: Vec::new(),
                 scroll: crate::util::ScrollState::new(),
