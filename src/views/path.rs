@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
+use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
 use crate::theme::Theme;
 use crate::views::{StatusInfo, View, ViewAction};
@@ -91,25 +91,15 @@ impl View for PathView {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                self.scroll.move_up();
-            }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.scroll.move_down(self.entries.len());
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::NONE, KeyCode::PageUp) => {
-                self.scroll.page_up(2);
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) | (KeyModifiers::NONE, KeyCode::PageDown) => {
-                self.scroll.page_down(self.entries.len(), 2);
-            }
-            (KeyModifiers::NONE, KeyCode::Home) => self.scroll.go_top(),
-            (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                self.scroll.go_bottom(self.entries.len());
-            }
-            (KeyModifiers::NONE, KeyCode::Char('y')) => {
+    fn handle_action(&mut self, action: Action) -> ViewAction {
+        match action {
+            Action::MoveUp => self.scroll.move_up(),
+            Action::MoveDown => self.scroll.move_down(self.entries.len()),
+            Action::PageUp => self.scroll.page_up(2),
+            Action::PageDown => self.scroll.page_down(self.entries.len(), 2),
+            Action::Home => self.scroll.go_top(),
+            Action::End => self.scroll.go_bottom(self.entries.len()),
+            Action::CopyValue => {
                 if let Some(entry) = self.entries.get(self.scroll.selected) {
                     return ViewAction::CopyToClipboard(format!(
                         "{} = {}",
@@ -117,7 +107,7 @@ impl View for PathView {
                     ));
                 }
             }
-            (KeyModifiers::SHIFT, KeyCode::Char('Y')) => {
+            Action::CopyPath => {
                 if let Some(entry) = self.entries.get(self.scroll.selected) {
                     return ViewAction::CopyToClipboard(entry.path.clone());
                 }

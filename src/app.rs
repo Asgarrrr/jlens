@@ -11,13 +11,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
 use crate::event::AppEvent;
-use crate::input;
+use crate::keymap::{Action, KeyMap};
 use crate::model::lazy::LazyDocument;
 use crate::model::node::{JsonDocument, NodeId};
 use crate::parser;
@@ -44,6 +43,7 @@ struct App {
     document: Arc<JsonDocument>,
     theme: Theme,
     active_mode: ViewMode,
+    keymap: KeyMap,
     tree_view: TreeView,
     /// Non-tree views are constructed lazily on first access to reduce startup time.
     raw_view: Option<RawView>,
@@ -75,6 +75,7 @@ impl App {
             document,
             theme,
             active_mode: ViewMode::Tree,
+            keymap: KeyMap::default_map(),
             tree_view,
             raw_view: None,
             table_view: None,
@@ -480,9 +481,13 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             FilterAction::CloseResult => app.filter.close_result(),
             FilterAction::ReopenInput => app.filter.open(),
             FilterAction::DelegateToResult(k) => {
-                if let Some(ref mut view) = app.filter.result_view {
-                    let action = view.handle_key(k);
-                    handle_action(app, action);
+                if let Some(action) = app.keymap.resolve(&k) {
+                    let view_action = if let Some(ref mut view) = app.filter.result_view {
+                        view.handle_action(action)
+                    } else {
+                        ViewAction::None
+                    };
+                    handle_action(app, view_action);
                 }
             }
             FilterAction::None
@@ -531,12 +536,9 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         return;
     }
 
-    let action = input::handle_global_key(key);
-    if matches!(action, ViewAction::None) {
-        let action = app.active_view_mut().handle_key(key);
-        handle_action(app, action);
-    } else {
-        handle_action(app, action);
+    if let Some(action) = app.keymap.resolve(&key) {
+        let view_action = dispatch_action(app, action);
+        handle_action(app, view_action);
     }
 }
 
@@ -545,25 +547,24 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
     let main_area = app.last_main_area;
     let status_area = app.last_status_area;
 
-    /// Dispatch a synthetic key event to the currently visible view,
+    /// Dispatch a scroll action to the currently visible view,
     /// routing the returned `ViewAction` through `handle_action`.
-    fn scroll_view(app: &mut App, code: KeyCode) {
-        let key = crossterm::event::KeyEvent::new(code, KeyModifiers::NONE);
-        let action = if app.filter.showing_result {
+    fn scroll_view(app: &mut App, action: Action) {
+        let view_action = if app.filter.showing_result {
             app.filter
                 .result_view
                 .as_mut()
-                .map(|v| v.handle_key(key))
+                .map(|v| v.handle_action(action))
                 .unwrap_or(ViewAction::None)
         } else {
-            app.active_view_mut().handle_key(key)
+            app.active_view_mut().handle_action(action)
         };
-        handle_action(app, action);
+        handle_action(app, view_action);
     }
 
     match mouse.kind {
-        MouseEventKind::ScrollUp => scroll_view(app, KeyCode::Up),
-        MouseEventKind::ScrollDown => scroll_view(app, KeyCode::Down),
+        MouseEventKind::ScrollUp => scroll_view(app, Action::MoveUp),
+        MouseEventKind::ScrollDown => scroll_view(app, Action::MoveDown),
         MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
             // Breadcrumb click: clicking a path segment in the status bar navigates there.
             if !app.filter.showing_result
@@ -602,6 +603,36 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
             }
         }
         _ => {}
+    }
+}
+
+/// Convert a semantic `Action` to a `ViewAction`.
+///
+/// Global actions (Quit, SwitchView, StartSearch, etc.) are handled here
+/// directly. View-local actions (MoveUp, ToggleExpand, etc.) are forwarded
+/// to the active view.
+fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
+    match action {
+        Action::Quit => ViewAction::Quit,
+        Action::SwitchView(n) => {
+            let mode = match n {
+                1 => crate::views::ViewMode::Tree,
+                2 => crate::views::ViewMode::Table,
+                3 => crate::views::ViewMode::Raw,
+                4 => crate::views::ViewMode::Paths,
+                5 => crate::views::ViewMode::Stats,
+                _ => return ViewAction::None,
+            };
+            ViewAction::SwitchView(mode)
+        }
+        Action::StartSearch => ViewAction::StartSearch,
+        Action::NextSearchHit => ViewAction::NextSearchHit,
+        Action::PrevSearchHit => ViewAction::PrevSearchHit,
+        Action::ToggleHelp => ViewAction::ToggleHelp,
+        Action::StartExport => ViewAction::StartExport,
+        Action::OpenFilter => ViewAction::OpenFilter,
+        // All other actions are view-local
+        other => app.active_view_mut().handle_action(other),
     }
 }
 

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, Row, Table};
 use ratatui::Frame;
 
+use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
 use crate::theme::Theme;
 use crate::views::{StatusInfo, View, ViewAction};
@@ -260,37 +260,17 @@ impl View for TableView {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                self.scroll.move_up();
-            }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.scroll.move_down(self.rows.len());
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('u'))
-            | (KeyModifiers::NONE, KeyCode::PageUp) => {
-                self.scroll.page_up(3);
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('d'))
-            | (KeyModifiers::NONE, KeyCode::PageDown) => {
-                self.scroll.page_down(self.rows.len(), 3);
-            }
-            (KeyModifiers::NONE, KeyCode::Home) => self.scroll.go_top(),
-            (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                self.scroll.go_bottom(self.rows.len());
-            }
-            // Sort column cycling
-            (KeyModifiers::NONE, KeyCode::Tab) => {
-                self.cycle_sort_column_forward();
-            }
-            (KeyModifiers::SHIFT, KeyCode::BackTab) => {
-                self.cycle_sort_column_backward();
-            }
-            // Toggle sort direction
-            (KeyModifiers::NONE, KeyCode::Char('s')) => {
-                self.toggle_sort_direction();
-            }
+    fn handle_action(&mut self, action: Action) -> ViewAction {
+        match action {
+            Action::MoveUp => self.scroll.move_up(),
+            Action::MoveDown => self.scroll.move_down(self.rows.len()),
+            Action::PageUp => self.scroll.page_up(3),
+            Action::PageDown => self.scroll.page_down(self.rows.len(), 3),
+            Action::Home => self.scroll.go_top(),
+            Action::End => self.scroll.go_bottom(self.rows.len()),
+            Action::NextColumn => self.cycle_sort_column_forward(),
+            Action::PrevColumn => self.cycle_sort_column_backward(),
+            Action::CycleSort => self.toggle_sort_direction(),
             _ => {}
         }
         ViewAction::None

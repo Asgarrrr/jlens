@@ -1,8 +1,8 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
+use crate::keymap::Action;
 use crate::model::node::{JsonDocument, NodeId};
 use crate::theme::Theme;
 use crate::views::{StatusInfo, View, ViewAction};
@@ -89,24 +89,14 @@ impl View for RawView {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                self.scroll.move_up();
-            }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.scroll.move_down(self.total_lines());
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::NONE, KeyCode::PageUp) => {
-                self.scroll.page_up(2);
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) | (KeyModifiers::NONE, KeyCode::PageDown) => {
-                self.scroll.page_down(self.total_lines(), 2);
-            }
-            (KeyModifiers::NONE, KeyCode::Home) => self.scroll.go_top(),
-            (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                self.scroll.go_bottom(self.total_lines());
-            }
+    fn handle_action(&mut self, action: Action) -> ViewAction {
+        match action {
+            Action::MoveUp => self.scroll.move_up(),
+            Action::MoveDown => self.scroll.move_down(self.total_lines()),
+            Action::PageUp => self.scroll.page_up(2),
+            Action::PageDown => self.scroll.page_down(self.total_lines(), 2),
+            Action::Home => self.scroll.go_top(),
+            Action::End => self.scroll.go_bottom(self.total_lines()),
             _ => {}
         }
         ViewAction::None

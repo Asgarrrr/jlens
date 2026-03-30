@@ -4,10 +4,10 @@ pub mod stats;
 pub mod table;
 pub mod tree;
 
-use crossterm::event::KeyEvent;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 
+use crate::keymap::Action;
 use crate::model::node::NodeId;
 use crate::theme::Theme;
 
@@ -76,7 +76,7 @@ impl ViewMode {
 /// Trait implemented by all visualization modes.
 pub trait View {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme);
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction;
+    fn handle_action(&mut self, action: Action) -> ViewAction;
     fn status_info(&self) -> StatusInfo;
     fn set_viewport_height(&mut self, height: usize);
     /// Handle a mouse click on a row within the viewport.

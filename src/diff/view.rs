@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::diff::{DiffNode, DiffResult, DiffStats, DiffStatus};
+use crate::keymap::Action;
 use crate::theme::Theme;
 use crate::util::ScrollState;
 use crate::views::{StatusInfo, View, ViewAction};
@@ -322,46 +322,27 @@ impl View for DiffView {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
+    fn handle_action(&mut self, action: Action) -> ViewAction {
         let total = self.rows.len();
-        match (key.modifiers, key.code) {
+        match action {
             // Navigation
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                self.scroll.move_up();
-            }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.scroll.move_down(total);
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::NONE, KeyCode::PageUp) => {
-                self.scroll.page_up(2);
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) | (KeyModifiers::NONE, KeyCode::PageDown) => {
-                self.scroll.page_down(total, 2);
-            }
-            (KeyModifiers::NONE, KeyCode::Home) => {
-                self.scroll.go_top();
-            }
-            (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                self.scroll.go_bottom(total);
-            }
+            Action::MoveUp => self.scroll.move_up(),
+            Action::MoveDown => self.scroll.move_down(total),
+            Action::PageUp => self.scroll.page_up(2),
+            Action::PageDown => self.scroll.page_down(total, 2),
+            Action::Home => self.scroll.go_top(),
+            Action::End => self.scroll.go_bottom(total),
 
             // Expand/collapse
-            (KeyModifiers::NONE, KeyCode::Enter) | (KeyModifiers::NONE, KeyCode::Char(' ')) => {
-                self.toggle_expand();
-            }
-            (KeyModifiers::NONE, KeyCode::Right) | (KeyModifiers::NONE, KeyCode::Char('l')) => {
-                self.expand();
-            }
-            (KeyModifiers::NONE, KeyCode::Left) | (KeyModifiers::NONE, KeyCode::Char('h')) => {
-                self.collapse();
-            }
+            Action::ToggleExpand => self.toggle_expand(),
+            Action::ExpandNode => self.expand(),
+            Action::CollapseNode => self.collapse(),
 
             // Quit
-            (KeyModifiers::NONE, KeyCode::Char('q')) => return ViewAction::Quit,
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) => return ViewAction::Quit,
+            Action::Quit => return ViewAction::Quit,
 
             // Help
-            (KeyModifiers::NONE, KeyCode::Char('?')) => return ViewAction::ToggleHelp,
+            Action::ToggleHelp => return ViewAction::ToggleHelp,
 
             _ => {}
         }

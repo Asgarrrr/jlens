@@ -2,7 +2,7 @@ mod app;
 mod diff;
 mod event;
 mod filter;
-mod input;
+mod keymap;
 mod model;
 mod parser;
 mod search;

@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
+use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
 use crate::theme::Theme;
 use crate::views::raw::rebuild_serde_value;
@@ -527,56 +527,32 @@ impl View for TreeView {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
-        match (key.modifiers, key.code) {
+    fn handle_action(&mut self, action: Action) -> ViewAction {
+        match action {
             // Navigation
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                self.move_up();
-            }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.move_down();
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::NONE, KeyCode::PageUp) => {
-                self.page_up();
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) | (KeyModifiers::NONE, KeyCode::PageDown) => {
-                self.page_down();
-            }
-            (KeyModifiers::NONE, KeyCode::Home) => {
-                self.go_top();
-            }
-            (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
-                self.go_bottom();
-            }
+            Action::MoveUp => self.move_up(),
+            Action::MoveDown => self.move_down(),
+            Action::PageUp => self.page_up(),
+            Action::PageDown => self.page_down(),
+            Action::Home => self.go_top(),
+            Action::End => self.go_bottom(),
 
             // Expand/collapse
-            (KeyModifiers::NONE, KeyCode::Enter) | (KeyModifiers::NONE, KeyCode::Char(' ')) => {
-                self.toggle_expand();
-            }
-            (KeyModifiers::NONE, KeyCode::Right) | (KeyModifiers::NONE, KeyCode::Char('l')) => {
-                self.expand();
-            }
-            (KeyModifiers::NONE, KeyCode::Left) | (KeyModifiers::NONE, KeyCode::Char('h')) => {
-                self.collapse();
-            }
-
-            // Expand/collapse all
-            (KeyModifiers::NONE, KeyCode::Char('e')) => {
-                self.expand_all();
-            }
-            (KeyModifiers::SHIFT, KeyCode::Char('E')) => {
-                self.collapse_all();
-            }
+            Action::ToggleExpand => self.toggle_expand(),
+            Action::ExpandNode => self.expand(),
+            Action::CollapseNode => self.collapse(),
+            Action::ExpandAll => self.expand_all(),
+            Action::CollapseAll => self.collapse_all(),
 
             // Copy value
-            (KeyModifiers::NONE, KeyCode::Char('y')) => {
+            Action::CopyValue => {
                 if let Some(row) = self.visible_rows.get(self.selected) {
                     let value_str = node_to_clipboard_string(&self.document, row.node_id);
                     return ViewAction::CopyToClipboard(value_str);
                 }
             }
             // Copy path
-            (KeyModifiers::SHIFT, KeyCode::Char('Y')) => {
+            Action::CopyPath => {
                 if let Some(row) = self.visible_rows.get(self.selected) {
                     let path = self.document.path_of(row.node_id);
                     return ViewAction::CopyToClipboard(path);

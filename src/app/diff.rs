@@ -13,6 +13,7 @@ use ratatui::backend::CrosstermBackend;
 use crate::diff::algo;
 use crate::diff::view::DiffView;
 use crate::event::AppEvent;
+use crate::keymap::KeyMap;
 use crate::parser;
 use crate::theme::Theme;
 use crate::ui;
@@ -51,6 +52,7 @@ fn run_diff_app(
     theme: Theme,
 ) -> Result<()> {
     const TICK: Duration = Duration::from_millis(100);
+    let keymap = KeyMap::default_map();
     let mut show_help = false;
     let mut should_quit = false;
     let mut last_main_area = Rect::default();
@@ -89,9 +91,9 @@ fn run_diff_app(
             AppEvent::Key(key) => {
                 if show_help {
                     show_help = false;
-                } else {
-                    let action = diff_view.handle_key(key);
-                    match action {
+                } else if let Some(action) = keymap.resolve(&key) {
+                    let view_action = diff_view.handle_action(action);
+                    match view_action {
                         ViewAction::Quit => should_quit = true,
                         ViewAction::ToggleHelp => show_help = !show_help,
                         _ => {}
@@ -100,18 +102,16 @@ fn run_diff_app(
             }
             AppEvent::Mouse(mouse) => {
                 use crossterm::event::MouseEventKind;
+                use crate::keymap::Action;
                 match mouse.kind {
                     MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
-                        let code = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
-                            crossterm::event::KeyCode::Up
+                        let scroll_action = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                            Action::MoveUp
                         } else {
-                            crossterm::event::KeyCode::Down
+                            Action::MoveDown
                         };
-                        let action = diff_view.handle_key(crossterm::event::KeyEvent::new(
-                            code,
-                            crossterm::event::KeyModifiers::NONE,
-                        ));
-                        match action {
+                        let view_action = diff_view.handle_action(scroll_action);
+                        match view_action {
                             ViewAction::Quit => should_quit = true,
                             ViewAction::ToggleHelp => show_help = !show_help,
                             _ => {}

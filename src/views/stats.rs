@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
+use crate::keymap::Action;
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
 use crate::theme::Theme;
 use crate::util::format_count;
@@ -113,14 +113,10 @@ impl View for StatsView {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> ViewAction {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                self.scroll.move_up();
-            }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                self.scroll.move_down(self.lines.len());
-            }
+    fn handle_action(&mut self, action: Action) -> ViewAction {
+        match action {
+            Action::MoveUp => self.scroll.move_up(),
+            Action::MoveDown => self.scroll.move_down(self.lines.len()),
             _ => {}
         }
         ViewAction::None
