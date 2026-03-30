@@ -151,6 +151,7 @@ impl Default for KeyMap {
             (KeyModifiers::NONE, Char('3'), SwitchView(3)),
             (KeyModifiers::NONE, Char('4'), SwitchView(4)),
             (KeyModifiers::NONE, Char('5'), SwitchView(5)),
+            (KeyModifiers::NONE, Char('6'), SwitchView(6)),
             (KeyModifiers::NONE, Char('/'), StartSearch),
             (KeyModifiers::CONTROL, Char('f'), StartSearch),
             (KeyModifiers::NONE, Char('n'), NextSearchHit),
@@ -202,6 +203,7 @@ fn parse_action(name: &str) -> Option<Action> {
         "switch_view_3" => Action::SwitchView(3),
         "switch_view_4" => Action::SwitchView(4),
         "switch_view_5" => Action::SwitchView(5),
+        "switch_view_6" => Action::SwitchView(6),
         _ => return None,
     })
 }

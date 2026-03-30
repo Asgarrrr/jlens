@@ -52,6 +52,7 @@ struct App {
     table_view: Option<TableView>,
     path_view: Option<PathView>,
     stats_view: Option<StatsView>,
+    schema_view: Option<crate::views::schema::SchemaView>,
     last_viewport_height: usize,
     search: SearchState,
     clipboard: Option<arboard::Clipboard>,
@@ -97,6 +98,7 @@ impl App {
             table_view: None,
             path_view: None,
             stats_view: None,
+            schema_view: None,
             last_viewport_height: 0,
             search: SearchState::new(),
             clipboard: arboard::Clipboard::new().ok(),
@@ -156,6 +158,7 @@ impl App {
         self.table_view = None;
         self.path_view = None;
         self.stats_view = None;
+        self.schema_view = None;
         self.preview_cache = None;
         self.filter_value_cache = None;
         self.filter_fields_cache = None;
@@ -190,6 +193,7 @@ impl App {
         self.table_view = None;
         self.path_view = None;
         self.stats_view = None;
+        self.schema_view = None;
 
         // Update stub IDs.
         let stubs: HashSet<NodeId> = lazy.stub_ids().collect();
@@ -230,6 +234,13 @@ impl App {
                     self.stats_view = Some(v);
                 }
             }
+            ViewMode::Schema => {
+                if self.schema_view.is_none() {
+                    let root = self.effective_root();
+                    let v = crate::views::schema::SchemaView::new(Arc::clone(&self.document), root);
+                    self.schema_view = Some(v);
+                }
+            }
         }
     }
 
@@ -240,6 +251,7 @@ impl App {
             ViewMode::Table => self.table_view.as_ref().expect("view not initialized"),
             ViewMode::Paths => self.path_view.as_ref().expect("view not initialized"),
             ViewMode::Stats => self.stats_view.as_ref().expect("view not initialized"),
+            ViewMode::Schema => self.schema_view.as_ref().expect("view not initialized"),
         }
     }
 
@@ -250,6 +262,7 @@ impl App {
             ViewMode::Table => self.table_view.as_mut().expect("view not initialized"),
             ViewMode::Paths => self.path_view.as_mut().expect("view not initialized"),
             ViewMode::Stats => self.stats_view.as_mut().expect("view not initialized"),
+            ViewMode::Schema => self.schema_view.as_mut().expect("view not initialized"),
         }
     }
 
@@ -441,6 +454,7 @@ fn run_app(
         "raw" => ViewMode::Raw,
         "paths" => ViewMode::Paths,
         "stats" => ViewMode::Stats,
+        "schema" => ViewMode::Schema,
         _ => ViewMode::Tree,
     };
     let mut app = App::new(document, opts.theme, opts.keymap);
@@ -509,10 +523,11 @@ fn run_app(
                 if app.last_viewport_height != new_height {
                     app.last_viewport_height = new_height;
                     app.tree_view.set_viewport_height(new_height);
-                    if let Some(ref mut v) = app.raw_view   { v.set_viewport_height(new_height); }
-                    if let Some(ref mut v) = app.table_view { v.set_viewport_height(new_height); }
-                    if let Some(ref mut v) = app.path_view  { v.set_viewport_height(new_height); }
-                    if let Some(ref mut v) = app.stats_view { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.raw_view    { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.table_view  { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.path_view   { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.stats_view  { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.schema_view { v.set_viewport_height(new_height); }
                     if let Some(ref mut res) = app.filter.result {
                         res.view.set_viewport_height(new_height);
                     }
@@ -924,6 +939,7 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
                 3 => crate::views::ViewMode::Raw,
                 4 => crate::views::ViewMode::Paths,
                 5 => crate::views::ViewMode::Stats,
+                6 => crate::views::ViewMode::Schema,
                 _ => return ViewAction::None,
             };
             ViewAction::SwitchView(mode)
