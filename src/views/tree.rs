@@ -349,6 +349,13 @@ impl TreeView {
     fn render_row(&self, row: &FlattenedRow, is_selected: bool, theme: &Theme) -> Line<'static> {
         let mut spans: Vec<Span<'static>> = Vec::new();
 
+        // Selection indicator
+        if is_selected {
+            spans.push(Span::styled("\u{258e} ", theme.selected_indicator_style));
+        } else {
+            spans.push(Span::raw("  "));
+        }
+
         // Tree guide characters
         if row.depth > 0 {
             // Continuation lines for ancestors.
@@ -386,10 +393,7 @@ impl TreeView {
             } else {
                 ICON_COLLAPSED
             };
-            spans.push(Span::styled(
-                icon,
-                theme.fg_style,
-            ));
+            spans.push(Span::styled(icon, theme.tree_icon_style));
         }
 
         // Key (if in an object)
