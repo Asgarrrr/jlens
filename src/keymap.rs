@@ -42,6 +42,9 @@ pub(crate) enum Action {
     PreviewGrow,
     PreviewShrink,
 
+    // Finder
+    OpenFinder,
+
     // Global
     Quit,
     SwitchView(u8), // 1-5
@@ -133,6 +136,9 @@ impl Default for KeyMap {
             (KeyModifiers::NONE, Char('+'), PreviewGrow),
             (KeyModifiers::NONE, Char('-'), PreviewShrink),
             (KeyModifiers::SHIFT, Char('+'), PreviewGrow),
+            // Finder
+            (KeyModifiers::SHIFT, Char('@'), OpenFinder),
+            (KeyModifiers::NONE, Char('@'), OpenFinder),
             // Global
             (KeyModifiers::NONE, Char('q'), Quit),
             (KeyModifiers::CONTROL, Char('c'), Quit),
@@ -175,6 +181,7 @@ fn parse_action(name: &str) -> Option<Action> {
         "copy_path" => Action::CopyPath,
         "zoom_in" => Action::ZoomIn,
         "zoom_out" => Action::ZoomOut,
+        "open_finder" => Action::OpenFinder,
         "toggle_preview" => Action::TogglePreview,
         "preview_grow" => Action::PreviewGrow,
         "preview_shrink" => Action::PreviewShrink,

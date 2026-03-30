@@ -70,6 +70,7 @@ struct App {
     show_preview: bool,
     preview_height_pct: u16,
     preview_cache: Option<(NodeId, crate::preview::PreviewContent)>,
+    finder: crate::finder::FinderState,
 }
 
 impl App {
@@ -102,6 +103,7 @@ impl App {
             show_preview: false,
             preview_height_pct: 30,
             preview_cache: None,
+            finder: crate::finder::FinderState::new(),
         }
     }
 
@@ -568,6 +570,10 @@ fn run_app(
                 if app.show_help {
                     ui::render_help_overlay(frame, frame.area(), &app.theme);
                 }
+
+                if app.finder.active {
+                    crate::finder::render_overlay(frame, &app.finder, &app.theme);
+                }
             })?;
         }
 
@@ -613,6 +619,23 @@ fn run_app(
 fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
     if app.show_help {
         app.show_help = false;
+        return;
+    }
+
+    if app.finder.active {
+        match app.finder.handle_key(key) {
+            crate::finder::FinderAction::Close => {
+                app.finder.active = false;
+            }
+            crate::finder::FinderAction::Jump(node_id) => {
+                app.finder.active = false;
+                // Switch to tree view and navigate
+                app.ensure_view(ViewMode::Tree);
+                app.active_mode = ViewMode::Tree;
+                app.tree_view.navigate_to_node(node_id);
+            }
+            crate::finder::FinderAction::None => {}
+        }
         return;
     }
 
@@ -782,6 +805,10 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
         Action::ToggleHelp => ViewAction::ToggleHelp,
         Action::StartExport => ViewAction::StartExport,
         Action::OpenFilter => ViewAction::OpenFilter,
+        Action::OpenFinder => {
+            app.finder.open(&app.document, app.effective_root());
+            ViewAction::None
+        }
         Action::ZoomIn => {
             app.zoom_in();
             ViewAction::None

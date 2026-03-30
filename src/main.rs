@@ -3,6 +3,7 @@ mod config;
 mod diff;
 mod event;
 mod filter;
+mod finder;
 mod keymap;
 mod model;
 mod parser;
