@@ -284,6 +284,22 @@ impl FilterState {
                 self.show_suggestions = false;
                 FilterAction::None
             }
+            (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
+                // Delete word backwards (like readline)
+                if self.cursor > 0 {
+                    let text = &self.query[..self.cursor];
+                    let trimmed = text.trim_end();
+                    let word_start = trimmed
+                        .rfind([' ', '.', '|', '('])
+                        .map(|i| i + 1)
+                        .unwrap_or(0);
+                    self.query.drain(word_start..self.cursor);
+                    self.cursor = word_start;
+                    self.mark_edited();
+                    self.show_suggestions = false;
+                }
+                FilterAction::None
+            }
             (mods, KeyCode::Char(c))
                 if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
@@ -402,13 +418,17 @@ pub(crate) fn render_filter_bar(
 
     // Input line
     let input_area = Rect::new(area.x, area.y, area.width, 1);
+    let prompt = " \u{276f} ";
     let (before, after) = filter.query.split_at(filter.cursor);
     let mut spans = vec![
-        Span::styled(" \u{276f} ", theme.toolbar_brand_style),
+        Span::styled(prompt, theme.toolbar_brand_style),
         Span::styled(before, theme.fg_style),
-        Span::styled("\u{2588}", theme.input_cursor_style),
         Span::styled(after, theme.fg_style),
     ];
+
+    // Real terminal cursor (blinking) at the correct position
+    let cursor_x = input_area.x + prompt.len() as u16 + crate::util::display_width(before) as u16;
+    frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, input_area.y));
 
     if filter.show_suggestions {
         spans.push(Span::styled("  Tab/\u{2191}\u{2193} nav  Enter accept", theme.fg_dim_style));
