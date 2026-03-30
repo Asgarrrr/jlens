@@ -130,15 +130,21 @@ fn main() -> Result<()> {
     }
 
     // Normal mode
+    let opts = app::Options {
+        theme,
+        keymap,
+        tick_ms: cfg.general.tick_rate_ms,
+    };
+
     match cli.file {
-        Some(path) if path.to_str() == Some("-") => app::run_stdin_with(theme, keymap),
-        Some(path) => app::run_file_with(&path, theme, keymap),
+        Some(path) if path.to_str() == Some("-") => app::run_stdin_with(opts),
+        Some(path) => app::run_file_with(&path, opts),
         None => {
             if std::io::stdin().is_terminal() {
                 Cli::parse_from(["jlens", "--help"]);
                 Ok(())
             } else {
-                app::run_stdin_with(theme, keymap)
+                app::run_stdin_with(opts)
             }
         }
     }
