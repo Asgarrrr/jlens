@@ -128,6 +128,7 @@ impl Default for KeyMap {
             (KeyModifiers::CONTROL, Char('f'), StartSearch),
             (KeyModifiers::NONE, Char('n'), NextSearchHit),
             (KeyModifiers::SHIFT, Char('N'), PrevSearchHit),
+            (KeyModifiers::NONE, Char('?'), ToggleHelp),
             (KeyModifiers::SHIFT, Char('?'), ToggleHelp),
             (KeyModifiers::CONTROL, Char('s'), StartExport),
             (KeyModifiers::NONE, Char(':'), OpenFilter),

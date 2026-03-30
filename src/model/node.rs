@@ -232,77 +232,91 @@ impl DocumentBuilder {
         id
     }
 
+    /// Build the arena iteratively from a serde_json::Value tree.
+    /// Uses a work-stack + ID-stack to avoid stack overflow on deeply nested JSON.
     fn build_node(
         &mut self,
-        value: &serde_json::Value,
-        parent: Option<NodeId>,
-        depth: u16,
+        root_value: &serde_json::Value,
+        root_parent: Option<NodeId>,
+        root_depth: u16,
     ) -> NodeId {
-        self.max_depth = self.max_depth.max(depth);
+        enum Work<'a> {
+            /// Visit a value: allocate its node, push children onto work stack.
+            Visit {
+                value: &'a serde_json::Value,
+                parent: Option<NodeId>,
+                depth: u16,
+            },
+            /// Collect the last `count` IDs from `id_stack` as array children.
+            BuildArray { id: NodeId, count: usize },
+            /// Collect the last `count` IDs from `id_stack` as object entries.
+            BuildObject { id: NodeId, keys: Vec<Arc<str>> },
+        }
 
-        match value {
-            serde_json::Value::Null => self.allocate(JsonNode {
-                parent,
-                value: JsonValue::Null,
-                depth,
-            }),
+        let mut work = vec![Work::Visit {
+            value: root_value,
+            parent: root_parent,
+            depth: root_depth,
+        }];
+        let mut id_stack: Vec<NodeId> = Vec::new();
 
-            serde_json::Value::Bool(b) => self.allocate(JsonNode {
-                parent,
-                value: JsonValue::Bool(*b),
-                depth,
-            }),
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit { value, parent, depth } => {
+                    self.max_depth = self.max_depth.max(depth);
+                    let child_depth = depth.saturating_add(1);
 
-            serde_json::Value::Number(n) => self.allocate(JsonNode {
-                parent,
-                value: JsonValue::Number(n.clone()),
-                depth,
-            }),
-
-            serde_json::Value::String(s) => self.allocate(JsonNode {
-                parent,
-                value: JsonValue::String(Arc::from(s.as_str())),
-                depth,
-            }),
-
-            serde_json::Value::Array(items) => {
-                // Allocate the array node first with an empty children vec.
-                let id = self.allocate(JsonNode {
-                    parent,
-                    value: JsonValue::Array(Vec::with_capacity(items.len())),
-                    depth,
-                });
-
-                // Recursively build children.
-                let child_ids: Vec<NodeId> = items
-                    .iter()
-                    .map(|item| self.build_node(item, Some(id), depth.saturating_add(1)))
-                    .collect();
-
-                // Patch the children vec into the node.
-                self.nodes[id.index()].value = JsonValue::Array(child_ids);
-                id
-            }
-
-            serde_json::Value::Object(map) => {
-                let id = self.allocate(JsonNode {
-                    parent,
-                    value: JsonValue::Object(Vec::with_capacity(map.len())),
-                    depth,
-                });
-
-                let entries: Vec<(Arc<str>, NodeId)> = map
-                    .iter()
-                    .map(|(key, val)| {
-                        let child_id = self.build_node(val, Some(id), depth.saturating_add(1));
-                        (Arc::from(key.as_str()), child_id)
-                    })
-                    .collect();
-
-                self.nodes[id.index()].value = JsonValue::Object(entries);
-                id
+                    match value {
+                        serde_json::Value::Null => {
+                            let id = self.allocate(JsonNode { parent, value: JsonValue::Null, depth });
+                            id_stack.push(id);
+                        }
+                        serde_json::Value::Bool(b) => {
+                            let id = self.allocate(JsonNode { parent, value: JsonValue::Bool(*b), depth });
+                            id_stack.push(id);
+                        }
+                        serde_json::Value::Number(n) => {
+                            let id = self.allocate(JsonNode { parent, value: JsonValue::Number(n.clone()), depth });
+                            id_stack.push(id);
+                        }
+                        serde_json::Value::String(s) => {
+                            let id = self.allocate(JsonNode { parent, value: JsonValue::String(Arc::from(s.as_str())), depth });
+                            id_stack.push(id);
+                        }
+                        serde_json::Value::Array(items) => {
+                            let id = self.allocate(JsonNode { parent, value: JsonValue::Array(Vec::new()), depth });
+                            work.push(Work::BuildArray { id, count: items.len() });
+                            for item in items.iter().rev() {
+                                work.push(Work::Visit { value: item, parent: Some(id), depth: child_depth });
+                            }
+                        }
+                        serde_json::Value::Object(map) => {
+                            let id = self.allocate(JsonNode { parent, value: JsonValue::Object(Vec::new()), depth });
+                            let keys: Vec<Arc<str>> = map.keys().map(|k| Arc::from(k.as_str())).collect();
+                            work.push(Work::BuildObject { id, keys });
+                            for val in map.values().rev() {
+                                work.push(Work::Visit { value: val, parent: Some(id), depth: child_depth });
+                            }
+                        }
+                    }
+                }
+                Work::BuildArray { id, count } => {
+                    let start = id_stack.len() - count;
+                    let children: Vec<NodeId> = id_stack.drain(start..).collect();
+                    self.nodes[id.index()].value = JsonValue::Array(children);
+                    id_stack.push(id);
+                }
+                Work::BuildObject { id, keys } => {
+                    let start = id_stack.len() - keys.len();
+                    let child_ids = id_stack.drain(start..);
+                    let entries: Vec<(Arc<str>, NodeId)> = keys.into_iter().zip(child_ids).collect();
+                    self.nodes[id.index()].value = JsonValue::Object(entries);
+                    id_stack.push(id);
+                }
             }
         }
+
+        id_stack.pop().expect("build_node produced no nodes")
     }
 }
 

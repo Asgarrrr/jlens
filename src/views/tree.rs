@@ -177,11 +177,14 @@ impl TreeView {
                 // Build continuation bitmask for the child. Bit `depth` (0-indexed)
                 // records whether the CURRENT node (the child's parent at this depth)
                 // has more siblings after it — i.e. `!frame.is_last`.
-                let child_cont = if !frame.is_last {
-                    frame.continuation | (1u64 << frame.depth)
+                let child_cont = if frame.depth < 64 {
+                    if !frame.is_last {
+                        frame.continuation | (1u64 << frame.depth)
+                    } else {
+                        frame.continuation & !(1u64 << frame.depth)
+                    }
                 } else {
-                    // Parent is last at its level — clear the bit (already 0).
-                    frame.continuation & !(1u64 << frame.depth)
+                    frame.continuation // no guide lines beyond depth 64
                 };
 
                 stack.push(FlattenFrame {
