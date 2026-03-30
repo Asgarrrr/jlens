@@ -15,6 +15,7 @@ pub struct RawView {
     pretty: String,
     line_offsets: Vec<u32>,
     scroll: crate::util::ScrollState,
+    scroll_x: usize,
 }
 
 impl RawView {
@@ -32,6 +33,7 @@ impl RawView {
         Self {
             pretty,
             line_offsets: offsets,
+            scroll_x: 0,
             scroll: crate::util::ScrollState::new(),
         }
     }
@@ -85,7 +87,9 @@ impl View for RawView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(lines).style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(lines)
+            .style(theme.bg_style)
+            .scroll((0, self.scroll_x as u16));
         frame.render_widget(paragraph, area);
 
         if self.total_lines() > height {
@@ -101,6 +105,8 @@ impl View for RawView {
             Action::PageDown => self.scroll.page_down(self.total_lines(), 2),
             Action::Home => self.scroll.go_top(),
             Action::End => self.scroll.go_bottom(self.total_lines()),
+            Action::ScrollLeft => self.scroll_x = self.scroll_x.saturating_sub(4),
+            Action::ScrollRight => { self.scroll_x += 4; }
             _ => {}
         }
         ViewAction::None

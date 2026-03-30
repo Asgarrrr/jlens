@@ -29,6 +29,10 @@ pub(crate) enum Action {
     PrevColumn,
     CycleSort,
 
+    // Horizontal scroll
+    ScrollLeft,
+    ScrollRight,
+
     // Clipboard
     CopyValue,
     CopyPath,
@@ -128,6 +132,9 @@ impl Default for KeyMap {
             (KeyModifiers::NONE, Tab, NextColumn),
             (KeyModifiers::SHIFT, BackTab, PrevColumn),
             (KeyModifiers::NONE, Char('s'), CycleSort),
+            // Horizontal scroll
+            (KeyModifiers::SHIFT, Char('H'), ScrollLeft),
+            (KeyModifiers::SHIFT, Char('L'), ScrollRight),
             // Clipboard
             (KeyModifiers::NONE, Char('y'), CopyValue),
             (KeyModifiers::SHIFT, Char('Y'), CopyPath),
@@ -183,6 +190,8 @@ fn parse_action(name: &str) -> Option<Action> {
         "next_column" => Action::NextColumn,
         "prev_column" => Action::PrevColumn,
         "cycle_sort" => Action::CycleSort,
+        "scroll_left" => Action::ScrollLeft,
+        "scroll_right" => Action::ScrollRight,
         "copy_value" => Action::CopyValue,
         "copy_path" => Action::CopyPath,
         "zoom_in" => Action::ZoomIn,

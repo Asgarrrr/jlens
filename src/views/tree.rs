@@ -66,6 +66,7 @@ pub struct TreeView {
     expanded: HashSet<NodeId>,
     selected: usize,
     scroll_offset: usize,
+    scroll_x: usize,
     visible_rows: Vec<FlattenedRow>,
     dirty: bool,
     search_matches: HashSet<NodeId>,
@@ -88,6 +89,7 @@ impl TreeView {
             expanded,
             selected: 0,
             scroll_offset: 0,
+            scroll_x: 0,
             visible_rows: Vec::new(),
             dirty: true,
             search_matches: HashSet::new(),
@@ -503,7 +505,9 @@ impl View for TreeView {
             })
             .collect();
 
-        let paragraph = ratatui::widgets::Paragraph::new(lines).style(theme.bg_style);
+        let paragraph = ratatui::widgets::Paragraph::new(lines)
+            .style(theme.bg_style)
+            .scroll((0, self.scroll_x as u16));
 
         frame.render_widget(paragraph, area);
 
@@ -534,6 +538,14 @@ impl View for TreeView {
             Action::CollapseNode => self.collapse(),
             Action::ExpandAll => self.expand_all(),
             Action::CollapseAll => self.collapse_all(),
+
+            // Horizontal scroll
+            Action::ScrollLeft => {
+                self.scroll_x = self.scroll_x.saturating_sub(4);
+            }
+            Action::ScrollRight => {
+                self.scroll_x += 4;
+            }
 
             // Copy value
             Action::CopyValue => {

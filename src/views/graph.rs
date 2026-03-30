@@ -276,21 +276,21 @@ impl View for GraphView {
 
     fn handle_action(&mut self, action: Action) -> ViewAction {
         match action {
+            // Pan
             Action::MoveUp => self.pan(0.0, 3.0),
             Action::MoveDown => self.pan(0.0, -3.0),
             Action::PageUp => self.pan(0.0, 10.0),
             Action::PageDown => self.pan(0.0, -10.0),
-            Action::ExpandNode => self.pan(5.0, 0.0),
-            Action::CollapseNode => self.pan(-5.0, 0.0),
-            Action::Home => self.zoom_in(),
-            Action::End => self.zoom_out(),
-            Action::ToggleExpand => self.center_on_selected(),
-            Action::CopyValue => {
-                self.select_next();
-            }
-            Action::CopyPath => {
-                self.select_prev();
-            }
+            Action::ExpandNode => self.pan(5.0, 0.0),   // l / Right
+            Action::CollapseNode => self.pan(-5.0, 0.0), // h / Left
+            // Zoom
+            Action::PreviewGrow => self.zoom_in(),       // +
+            Action::PreviewShrink => self.zoom_out(),    // -
+            Action::Home => { self.zoom = 1.0; self.center_on_selected(); }
+            // Select
+            Action::NextSearchHit => self.select_next(), // n
+            Action::PrevSearchHit => self.select_prev(), // N
+            Action::ToggleExpand => self.center_on_selected(), // Enter
             _ => {}
         }
         ViewAction::None
