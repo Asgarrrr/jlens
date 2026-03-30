@@ -339,21 +339,13 @@ pub(crate) fn evaluate(
         return;
     }
 
-    // Smart mode: if query doesn't look like jq syntax, try to interpret it.
-    let effective_query = smart_rewrite(query, cached_value);
-    let expr = match crate::filter::parse::parse(&effective_query) {
+    let expr = match crate::filter::parse::parse(query) {
         Ok(e) => e,
-        Err(_) => {
-            // If smart rewrite failed to parse, try the original
-            match crate::filter::parse::parse(query) {
-                Ok(e) => e,
-                Err(e) => {
-                    filter.error = Some(e.to_string());
-                    filter.result = None;
-                    filter.count = 0;
-                    return;
-                }
-            }
+        Err(e) => {
+            filter.error = Some(e.to_string());
+            filter.result = None;
+            filter.count = 0;
+            return;
         }
     };
 
@@ -595,62 +587,6 @@ fn completion_prefix(text: &str) -> &str {
 ///   "age > 30"               → ".[] | select(.age > 30)"
 ///   "name = Alice"           → ".[] | select(.name == \"Alice\")"
 ///   "contractYear != 2023"   → ".[] | select(.contractYear != 2023)"
-///   ".foo | length"          → unchanged (already jq)
-///   "length"                 → unchanged (builtin)
-fn smart_rewrite(query: &str, cached_value: &Option<serde_json::Value>) -> String {
-    let q = query.trim();
-
-    // Already jq syntax — pass through
-    if q.starts_with('.')
-        || q.starts_with('|')
-        || q.starts_with('[')
-        || q.starts_with('(')
-        || q.starts_with("select")
-        || q.starts_with("map")
-        || q.starts_with("sort_by")
-        || BUILTINS.contains(&q)
-    {
-        return q.to_string();
-    }
-
-    // "field op value" pattern: name = Alice, age > 30, etc.
-    let ops = ["!=", ">=", "<=", "==", ">", "<", "="];
-    for op in &ops {
-        if let Some(idx) = q.find(op) {
-            let field = q[..idx].trim();
-            let value = q[idx + op.len()..].trim();
-            if !field.is_empty() && !value.is_empty() && field.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                let jq_op = if *op == "=" { "==" } else { op };
-                // Detect if value is a string (not a number or bool/null)
-                let jq_value = if value.parse::<f64>().is_ok()
-                    || value == "true"
-                    || value == "false"
-                    || value == "null"
-                {
-                    value.to_string()
-                } else {
-                    format!("\"{}\"", value)
-                };
-                return format!(".[] | select(.{field} {jq_op} {jq_value})");
-            }
-        }
-    }
-
-    // Just a bare field name — check if it's a real field in the data
-    if q.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        if let Some(Value::Array(_)) = cached_value {
-            return format!(".[] | .{q}");
-        } else if let Some(Value::Object(_)) = cached_value {
-            return format!(".{q}");
-        }
-    }
-
-    // Fallback: return as-is
-    q.to_string()
-}
-
-use serde_json::Value;
-
 fn collect_field_names(doc: &JsonDocument, root: crate::model::node::NodeId) -> Vec<String> {
     use crate::model::node::JsonValue;
     let mut fields = Vec::new();
