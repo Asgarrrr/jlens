@@ -505,7 +505,17 @@ fn run_app(
                     1,
                 );
 
-                // Single bordered block with tabs as title, status as footer
+                // Split area: main block + optional filter zone at bottom
+                let (block_area, filter_zone) = if app.filter.active {
+                    let [top, bottom] = Layout::vertical([
+                        Constraint::Min(5),
+                        Constraint::Length(3),
+                    ]).areas(main_area_full);
+                    (top, Some(bottom))
+                } else {
+                    (main_area_full, None)
+                };
+
                 let view_block = ui::build_main_block(
                     app.active_mode,
                     !app.filter.active && app.filter.has_result(),
@@ -514,8 +524,8 @@ fn run_app(
                     &app.document,
                     &app.theme,
                 );
-                let inner = view_block.inner(main_area_full);
-                frame.render_widget(view_block, main_area_full);
+                let inner = view_block.inner(block_area);
+                frame.render_widget(view_block, block_area);
 
                 // Update cached geometry used by mouse hit-testing and scroll logic.
                 app.last_main_area = inner;
@@ -595,11 +605,8 @@ fn run_app(
                     }
                 }
 
-                // Filter: its own bordered zone at the bottom of the inner area
-                if app.filter.active {
-                    let filter_h = 3u16; // border + input + border
-                    let filter_y = inner.y + inner.height.saturating_sub(filter_h);
-                    let filter_block_area = Rect::new(inner.x, filter_y, inner.width, filter_h);
+                // Filter: its own bordered zone below the main block
+                if let Some(filter_block_area) = filter_zone {
 
                     let fblock = ratatui::widgets::Block::bordered()
                         .title(ratatui::text::Line::from(vec![
