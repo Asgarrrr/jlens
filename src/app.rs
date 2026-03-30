@@ -68,7 +68,7 @@ struct App {
     lazy_doc: Option<LazyDocument>,
     zoom_stack: Vec<NodeId>,
     show_preview: bool,
-    preview_height_pct: u16,
+    preview_pct: u16,
     preview_cache: Option<(NodeId, crate::preview::PreviewContent)>,
     finder: crate::finder::FinderState,
 }
@@ -101,7 +101,7 @@ impl App {
             lazy_doc: None,
             zoom_stack: Vec::new(),
             show_preview: false,
-            preview_height_pct: 30,
+            preview_pct: 50,
             preview_cache: None,
             finder: crate::finder::FinderState::new(),
         }
@@ -445,13 +445,15 @@ fn run_app(
             terminal.draw(|frame| {
                 let [toolbar, main_area_full, status] = ui::layout(frame.area());
 
-                // Split main_area_full into content + preview (if active).
-                let (content_area, preview_area) = if app.show_preview {
-                    let preview_rows =
-                        (main_area_full.height * app.preview_height_pct / 100).max(3);
-                    let [content, preview] = Layout::vertical([
-                        Constraint::Min(3),
-                        Constraint::Length(preview_rows),
+                // Split main_area_full into content (left) + preview (right) if active.
+                let (content_area, preview_area) = if app.show_preview
+                    && app.active_mode == ViewMode::Tree
+                {
+                    let preview_cols =
+                        (main_area_full.width * app.preview_pct / 100).max(20);
+                    let [content, preview] = Layout::horizontal([
+                        Constraint::Min(20),
+                        Constraint::Length(preview_cols),
                     ])
                     .areas(main_area_full);
                     (content, Some(preview))
@@ -859,14 +861,14 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
             ViewAction::None
         }
         Action::PreviewGrow => {
-            if app.show_preview && app.preview_height_pct < 80 {
-                app.preview_height_pct += 5;
+            if app.show_preview && app.preview_pct < 80 {
+                app.preview_pct += 5;
             }
             ViewAction::None
         }
         Action::PreviewShrink => {
-            if app.show_preview && app.preview_height_pct > 10 {
-                app.preview_height_pct -= 5;
+            if app.show_preview && app.preview_pct > 10 {
+                app.preview_pct -= 5;
             }
             ViewAction::None
         }
