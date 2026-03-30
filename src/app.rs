@@ -494,6 +494,8 @@ fn run_app(
                             },
                             area,
                         );
+                        // Render autocomplete popup above the filter bar
+                        filter::render_suggestions(frame, &app.filter, area, &app.theme);
                     }
                 } else if app.search.active {
                     if let Some(area) = bottom_bar {
@@ -650,6 +652,11 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             | FilterAction::CloseResult
             | FilterAction::ReopenInput
             | FilterAction::DelegateToResult(_) => {}
+        }
+        // Update autocomplete suggestions
+        if app.filter.active && app.filter.show_suggestions {
+            let root = app.effective_root();
+            filter::update_suggestions(&mut app.filter, &app.document, root);
         }
         return;
     }

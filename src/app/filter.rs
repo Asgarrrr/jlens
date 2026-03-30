@@ -20,6 +20,10 @@ pub(crate) struct FilterState {
     pub(crate) showing_result: bool,
     pub(crate) result_view: Option<TreeView>,
     pub(crate) result_doc: Option<Arc<JsonDocument>>,
+    /// Autocomplete suggestions for the current query context.
+    pub(crate) suggestions: Vec<String>,
+    pub(crate) suggestion_idx: usize,
+    pub(crate) show_suggestions: bool,
 }
 
 pub(crate) enum FilterAction {
@@ -40,6 +44,9 @@ impl FilterState {
             showing_result: false,
             result_view: None,
             result_doc: None,
+            suggestions: Vec::new(),
+            suggestion_idx: 0,
+            show_suggestions: false,
         }
     }
 
@@ -47,6 +54,8 @@ impl FilterState {
         self.active = true;
         self.query.clear();
         self.error = None;
+        self.suggestions.clear();
+        self.show_suggestions = false;
     }
 
     pub(crate) fn close_input(&mut self) {
@@ -62,11 +71,44 @@ impl FilterState {
 
     pub(crate) fn handle_input_key(&mut self, key: KeyEvent) -> FilterAction {
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => FilterAction::CloseInput,
-            (KeyModifiers::NONE, KeyCode::Enter) => FilterAction::RunFilter,
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                if self.show_suggestions {
+                    self.show_suggestions = false;
+                    FilterAction::None
+                } else {
+                    FilterAction::CloseInput
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                if self.show_suggestions {
+                    self.accept_suggestion();
+                    FilterAction::None
+                } else {
+                    FilterAction::RunFilter
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                if self.show_suggestions && !self.suggestions.is_empty() {
+                    self.accept_suggestion();
+                } else {
+                    self.show_suggestions = true;
+                }
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::Down) if self.show_suggestions => {
+                if self.suggestion_idx + 1 < self.suggestions.len() {
+                    self.suggestion_idx += 1;
+                }
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::Up) if self.show_suggestions => {
+                self.suggestion_idx = self.suggestion_idx.saturating_sub(1);
+                FilterAction::None
+            }
             (KeyModifiers::NONE, KeyCode::Backspace) => {
                 self.query.pop();
                 self.error = None;
+                self.show_suggestions = !self.query.is_empty();
                 FilterAction::None
             }
             (mods, KeyCode::Char(c))
@@ -75,11 +117,24 @@ impl FilterState {
                 if self.query.len() < 1024 {
                     self.query.push(c);
                     self.error = None;
+                    self.show_suggestions = true;
                 }
                 FilterAction::None
             }
             _ => FilterAction::None,
         }
+    }
+
+    fn accept_suggestion(&mut self) {
+        let Some(suggestion) = self.suggestions.get(self.suggestion_idx).cloned() else {
+            return;
+        };
+        // Find the partial token being typed to replace it
+        let prefix = completion_prefix(&self.query);
+        self.query.truncate(self.query.len() - prefix.len());
+        self.query.push_str(&suggestion);
+        self.show_suggestions = false;
+        self.suggestion_idx = 0;
     }
 
     pub(crate) fn handle_result_key(&mut self, key: KeyEvent) -> FilterAction {
@@ -181,9 +236,202 @@ impl Widget for FilterBar<'_> {
             ));
         }
 
+        // Hint text
+        if filter.error.is_none() {
+            let hint = if filter.show_suggestions {
+                "  [Tab] accept  [\u{2191}\u{2193}] navigate"
+            } else {
+                "  [Enter] run  [Tab] suggest  [Esc] cancel"
+            };
+            spans.push(Span::styled(hint, theme.fg_dim_style));
+        }
+
         let line = Line::from(spans);
         ratatui::widgets::Paragraph::new(line)
             .style(theme.bg_style)
             .render(area, buf);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Suggestion popup (rendered separately, above the filter bar)
+// ---------------------------------------------------------------------------
+
+pub(crate) fn render_suggestions(
+    frame: &mut ratatui::Frame,
+    filter: &FilterState,
+    bar_area: Rect,
+    theme: &Theme,
+) {
+    if !filter.show_suggestions || filter.suggestions.is_empty() {
+        return;
+    }
+
+    let max_shown = filter.suggestions.len().min(8);
+    let popup_height = max_shown as u16 + 1; // +1 for border effect
+    let popup_y = bar_area.y.saturating_sub(popup_height);
+    let popup_width = bar_area.width.min(50);
+    let popup_area = Rect::new(bar_area.x + 3, popup_y, popup_width, popup_height);
+
+    // Clear background
+    frame.render_widget(ratatui::widgets::Clear, popup_area);
+
+    let mut lines = Vec::new();
+    for (i, suggestion) in filter.suggestions.iter().take(max_shown).enumerate() {
+        let is_selected = i == filter.suggestion_idx;
+        let style = if is_selected {
+            theme.selection_style
+        } else {
+            theme.bg_style
+        };
+        lines.push(Line::from(Span::styled(
+            format!(" {} ", suggestion),
+            style,
+        )));
+    }
+
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(lines).style(theme.bg_style),
+        popup_area,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Suggestion engine
+// ---------------------------------------------------------------------------
+
+const BUILTINS: &[&str] = &[
+    "length", "keys", "values", "type", "flatten",
+    "first", "last", "reverse", "unique", "sort",
+    "min", "max", "not", "to_number", "to_string",
+    "ascii_downcase", "select", "map", "sort_by",
+];
+
+/// Update suggestions based on the current query context and document.
+pub(crate) fn update_suggestions(
+    filter: &mut FilterState,
+    doc: &JsonDocument,
+    root: crate::model::node::NodeId,
+) {
+    filter.suggestion_idx = 0;
+
+    let query = &filter.query;
+    if query.is_empty() {
+        filter.suggestions = vec![".".into()];
+        return;
+    }
+
+    let ctx = detect_context(query);
+    let prefix = completion_prefix(query);
+
+    filter.suggestions = match ctx {
+        Context::AfterDot => {
+            // Suggest field names from document
+            let mut fields = collect_field_names(doc, root);
+            if !prefix.is_empty() {
+                let lower = prefix.to_lowercase();
+                fields.retain(|f| f.to_lowercase().starts_with(&lower));
+            }
+            fields.truncate(20);
+            fields
+        }
+        Context::AfterPipe => {
+            // Suggest builtins
+            let mut builtins: Vec<String> = BUILTINS.iter().map(|s| s.to_string()).collect();
+            builtins.push(".".into());
+            if !prefix.is_empty() {
+                let lower = prefix.to_lowercase();
+                builtins.retain(|b| b.to_lowercase().starts_with(&lower));
+            }
+            builtins
+        }
+        Context::General => {
+            let mut all: Vec<String> = BUILTINS.iter().map(|s| s.to_string()).collect();
+            all.push(".".into());
+            if !prefix.is_empty() {
+                let lower = prefix.to_lowercase();
+                all.retain(|s| s.to_lowercase().starts_with(&lower));
+            }
+            all.truncate(15);
+            all
+        }
+    };
+}
+
+#[derive(Debug)]
+enum Context {
+    AfterDot,
+    AfterPipe,
+    General,
+}
+
+fn detect_context(query: &str) -> Context {
+    let trimmed = query.trim_end();
+    if trimmed.ends_with('.') {
+        Context::AfterDot
+    } else if trimmed.ends_with('|') {
+        Context::AfterPipe
+    } else {
+        // Check what the last "word separator" was
+        let last_sep = trimmed.rfind(['.', '|', '(', ' ']);
+        match last_sep {
+            Some(i) => {
+                let sep = trimmed.as_bytes()[i];
+                match sep {
+                    b'.' => Context::AfterDot,
+                    b'|' | b' ' => Context::AfterPipe,
+                    b'(' => Context::General,
+                    _ => Context::General,
+                }
+            }
+            None => Context::General,
+        }
+    }
+}
+
+fn completion_prefix(query: &str) -> &str {
+    let bytes = query.as_bytes();
+    let mut i = bytes.len();
+    while i > 0 {
+        let b = bytes[i - 1];
+        if b == b'.' || b == b'|' || b == b'(' || b == b' ' || b == b')' {
+            break;
+        }
+        i -= 1;
+    }
+    &query[i..]
+}
+
+fn collect_field_names(doc: &JsonDocument, root: crate::model::node::NodeId) -> Vec<String> {
+    use crate::model::node::JsonValue;
+    let mut fields = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Walk the first 2 levels from root to collect field names
+    let mut stack = vec![(root, 0u8)];
+    while let Some((id, depth)) = stack.pop() {
+        if depth > 2 {
+            continue;
+        }
+        let node = doc.node(id);
+        match &node.value {
+            JsonValue::Object(entries) => {
+                for (key, child_id) in entries {
+                    if seen.insert(key.to_string()) {
+                        fields.push(key.to_string());
+                    }
+                    stack.push((*child_id, depth + 1));
+                }
+            }
+            JsonValue::Array(children) => {
+                for &child_id in children.iter().take(10) {
+                    stack.push((child_id, depth + 1));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fields.sort();
+    fields
 }
