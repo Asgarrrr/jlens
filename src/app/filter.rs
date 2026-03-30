@@ -418,7 +418,11 @@ pub(crate) fn render_filter_input(
         crate::util::display_width(before) + crate::util::display_width(after),
     );
 
-    let mut spans = vec![Span::styled(prompt, theme.toolbar_brand_style)];
+    // Build the line: [Filter ❯] query ... count
+    let mut spans = vec![
+        Span::styled(" Filter ", theme.toolbar_brand_style),
+        Span::styled(prompt, theme.toolbar_active_style),
+    ];
 
     if filter.query.is_empty() {
         spans.push(Span::styled(". | keys", theme.tree_guide_style));
@@ -428,17 +432,20 @@ pub(crate) fn render_filter_input(
     }
 
     spans.push(Span::raw(" ".repeat(padding)));
-    spans.push(Span::styled(right, right_style));
-    spans.push(Span::raw(" "));
 
-    // Distinct background for filter mode
+    // Result count as a styled badge
+    if !right.is_empty() {
+        spans.push(Span::styled(format!(" {right} "), right_style));
+    }
+
     frame.render_widget(
         ratatui::widgets::Paragraph::new(Line::from(spans)).style(theme.toolbar_bg_style),
         area,
     );
 
-    // Terminal cursor
-    let cursor_x = area.x + prompt_width + if filter.query.is_empty() { 0 } else { crate::util::display_width(before) as u16 };
+    // Terminal cursor after "Filter ❯ "
+    let label_width = crate::util::display_width(" Filter ") as u16 + prompt_width;
+    let cursor_x = area.x + label_width + if filter.query.is_empty() { 0 } else { crate::util::display_width(before) as u16 };
     frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, area.y));
 }
 
