@@ -62,19 +62,16 @@ struct FlattenFrame {
 
 pub struct TreeView {
     document: Arc<JsonDocument>,
+    display_root: NodeId,
     expanded: HashSet<NodeId>,
     selected: usize,
     scroll_offset: usize,
     visible_rows: Vec<FlattenedRow>,
     dirty: bool,
     search_matches: HashSet<NodeId>,
-    /// The node that is the "active" search hit (n/N navigation target),
-    /// rendered with `theme.search_current` to distinguish it from other matches.
     current_search_node: Option<NodeId>,
     viewport_height: usize,
-    /// Node IDs that are lazy stubs with unparsed children.
     stub_ids: HashSet<NodeId>,
-    /// Deferred action: a stub expansion was requested and needs app-level handling.
     pending_expand_stub: Option<NodeId>,
 }
 
@@ -84,8 +81,10 @@ impl TreeView {
         // Auto-expand root
         expanded.insert(document.root());
 
+        let root = document.root();
         let mut view = Self {
             document,
+            display_root: root,
             expanded,
             selected: 0,
             scroll_offset: 0,
@@ -120,7 +119,7 @@ impl TreeView {
     /// Replaces the former recursive `flatten_node` to avoid stack overflow
     /// on deeply nested JSON and to eliminate per-recursion Vec clones.
     fn flatten_node_iterative(&mut self) {
-        let root = self.document.root();
+        let root = self.display_root;
 
         let mut stack = vec![FlattenFrame {
             id: root,
@@ -598,6 +597,15 @@ impl View for TreeView {
 }
 
 impl TreeView {
+    /// Change the display root for zoom mode.
+    pub fn set_root(&mut self, root: NodeId) {
+        self.display_root = root;
+        self.expanded.insert(root);
+        self.selected = 0;
+        self.scroll_offset = 0;
+        self.rebuild_visible_rows();
+    }
+
     /// Navigate to a specific node, expanding all ancestors and scrolling to it.
     pub fn navigate_to_node(&mut self, target: NodeId) {
         // Expand all ancestors from root to target

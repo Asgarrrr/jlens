@@ -33,6 +33,10 @@ pub(crate) enum Action {
     CopyValue,
     CopyPath,
 
+    // Zoom
+    ZoomIn,
+    ZoomOut,
+
     // Global
     Quit,
     SwitchView(u8), // 1-5
@@ -116,6 +120,9 @@ impl Default for KeyMap {
             // Clipboard
             (KeyModifiers::NONE, Char('y'), CopyValue),
             (KeyModifiers::SHIFT, Char('Y'), CopyPath),
+            // Zoom
+            (KeyModifiers::NONE, Char('z'), ZoomIn),
+            (KeyModifiers::SHIFT, Char('Z'), ZoomOut),
             // Global
             (KeyModifiers::NONE, Char('q'), Quit),
             (KeyModifiers::CONTROL, Char('c'), Quit),
@@ -156,6 +163,8 @@ fn parse_action(name: &str) -> Option<Action> {
         "cycle_sort" => Action::CycleSort,
         "copy_value" => Action::CopyValue,
         "copy_path" => Action::CopyPath,
+        "zoom_in" => Action::ZoomIn,
+        "zoom_out" => Action::ZoomOut,
         "quit" => Action::Quit,
         "search" => Action::StartSearch,
         "next_search_hit" => Action::NextSearchHit,

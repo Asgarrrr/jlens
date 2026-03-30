@@ -23,9 +23,9 @@ struct PathEntry {
 }
 
 impl PathView {
-    pub fn new(document: Arc<JsonDocument>) -> Self {
+    pub fn new(document: Arc<JsonDocument>, root: NodeId) -> Self {
         let mut entries = Vec::new();
-        collect_leaves(&document, document.root(), "$".to_string(), &mut entries);
+        collect_leaves(&document, root, "$".to_string(), &mut entries);
 
         Self {
             entries,

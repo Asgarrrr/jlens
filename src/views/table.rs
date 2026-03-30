@@ -34,8 +34,7 @@ enum TableData {
 }
 
 /// Search the document for an array of objects suitable for table display.
-fn find_table_data(doc: &JsonDocument) -> TableData {
-    let root = doc.root();
+fn find_table_data(doc: &JsonDocument, root: NodeId) -> TableData {
     let root_node = doc.node(root);
 
     // Case 1: root is an array of objects
@@ -65,8 +64,8 @@ fn find_table_data(doc: &JsonDocument) -> TableData {
 }
 
 impl TableView {
-    pub fn new(document: Arc<JsonDocument>) -> Self {
-        let data = find_table_data(&document);
+    pub fn new(document: Arc<JsonDocument>, root: NodeId) -> Self {
+        let data = find_table_data(&document, root);
 
         match data {
             TableData::Found { columns, rows } => {

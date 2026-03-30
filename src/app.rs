@@ -66,6 +66,7 @@ struct App {
     filter: FilterState,
     /// When set, the document was loaded lazily and stubs can be expanded.
     lazy_doc: Option<LazyDocument>,
+    zoom_stack: Vec<NodeId>,
 }
 
 impl App {
@@ -94,7 +95,44 @@ impl App {
             export: ExportState::new(),
             filter: FilterState::new(),
             lazy_doc: None,
+            zoom_stack: Vec::new(),
         }
+    }
+
+    fn effective_root(&self) -> NodeId {
+        self.zoom_stack
+            .last()
+            .copied()
+            .unwrap_or_else(|| self.document.root())
+    }
+
+    fn zoom_in(&mut self) {
+        let Some(node_id) = self.tree_view.selected_node_id() else {
+            return;
+        };
+        // Only zoom into containers
+        if !self.document.node(node_id).value.is_container() {
+            return;
+        }
+        self.zoom_stack.push(node_id);
+        self.tree_view.set_root(node_id);
+        // Invalidate cached views so they rebuild from the new root
+        self.raw_view = None;
+        self.table_view = None;
+        self.path_view = None;
+        self.stats_view = None;
+    }
+
+    fn zoom_out(&mut self) {
+        if self.zoom_stack.pop().is_none() {
+            return;
+        }
+        let root = self.effective_root();
+        self.tree_view.set_root(root);
+        self.raw_view = None;
+        self.table_view = None;
+        self.path_view = None;
+        self.stats_view = None;
     }
 
     /// Initialize the App with a lazy document, setting stub IDs on the tree view.
@@ -138,28 +176,29 @@ impl App {
             ViewMode::Tree => {}
             ViewMode::Raw => {
                 if self.raw_view.is_none() {
-                    let mut v = RawView::new(&self.document);
+                    let mut v = RawView::new(&self.document, self.effective_root());
                     v.set_viewport_height(h);
                     self.raw_view = Some(v);
                 }
             }
             ViewMode::Table => {
                 if self.table_view.is_none() {
-                    let mut v = TableView::new(Arc::clone(&self.document));
+                    let mut v = TableView::new(Arc::clone(&self.document), self.effective_root());
                     v.set_viewport_height(h);
                     self.table_view = Some(v);
                 }
             }
             ViewMode::Paths => {
                 if self.path_view.is_none() {
-                    let mut v = PathView::new(Arc::clone(&self.document));
+                    let mut v = PathView::new(Arc::clone(&self.document), self.effective_root());
                     v.set_viewport_height(h);
                     self.path_view = Some(v);
                 }
             }
             ViewMode::Stats => {
                 if self.stats_view.is_none() {
-                    let mut v = StatsView::new(Arc::clone(&self.document), &self.theme);
+                    let mut v =
+                        StatsView::new(Arc::clone(&self.document), self.effective_root(), &self.theme);
                     v.set_viewport_height(h);
                     self.stats_view = Some(v);
                 }
@@ -701,6 +740,14 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
         Action::ToggleHelp => ViewAction::ToggleHelp,
         Action::StartExport => ViewAction::StartExport,
         Action::OpenFilter => ViewAction::OpenFilter,
+        Action::ZoomIn => {
+            app.zoom_in();
+            ViewAction::None
+        }
+        Action::ZoomOut => {
+            app.zoom_out();
+            ViewAction::None
+        }
         // All other actions are view-local
         other => app.active_view_mut().handle_action(other),
     }

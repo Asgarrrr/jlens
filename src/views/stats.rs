@@ -39,8 +39,8 @@ enum StatsLine {
 }
 
 impl StatsView {
-    pub fn new(document: Arc<JsonDocument>, theme: &Theme) -> Self {
-        let stats = compute_stats(&document);
+    pub fn new(document: Arc<JsonDocument>, root: NodeId, theme: &Theme) -> Self {
+        let stats = compute_stats(&document, root);
         let lines = build_stats_lines(&stats, document.metadata(), theme);
 
         Self {
@@ -142,7 +142,7 @@ impl View for StatsView {
 // Stats computation
 // ---------------------------------------------------------------------------
 
-fn compute_stats(doc: &JsonDocument) -> DocumentStats {
+fn compute_stats(doc: &JsonDocument, root: NodeId) -> DocumentStats {
     let mut type_counts: HashMap<&'static str, usize> = HashMap::new();
     let mut total_string_bytes: usize = 0;
     let mut longest_string: usize = 0;
@@ -152,7 +152,7 @@ fn compute_stats(doc: &JsonDocument) -> DocumentStats {
     let mut depth_sum: u64 = 0;
     let mut node_count: u64 = 0;
 
-    visit_all(doc, doc.root(), &mut |doc, id| {
+    visit_all(doc, root, &mut |doc, id| {
         let node = doc.node(id);
         node_count += 1;
         depth_sum += node.depth as u64;

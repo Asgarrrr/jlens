@@ -18,8 +18,8 @@ pub struct RawView {
 }
 
 impl RawView {
-    pub fn new(document: &JsonDocument) -> Self {
-        let json_value = rebuild_serde_value(document, document.root());
+    pub fn new(document: &JsonDocument, root: NodeId) -> Self {
+        let json_value = rebuild_serde_value(document, root);
         let pretty = serde_json::to_string_pretty(&json_value).unwrap_or_default();
 
         let mut offsets = vec![0u32];
