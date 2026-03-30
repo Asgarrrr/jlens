@@ -596,7 +596,8 @@ fn run_app(
 
                 // Overlays (rendered last, in z-order)
                 if app.filter.active {
-                    filter::render_filter_overlay(frame, &app.filter, &app.theme);
+                    let fields = app.filter_fields_cache.as_deref().unwrap_or(&[]);
+                    filter::render_filter_overlay(frame, &app.filter, &app.theme, fields);
                 }
 
                 if app.show_help {

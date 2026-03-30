@@ -364,6 +364,7 @@ pub(crate) fn render_filter_overlay(
     frame: &mut ratatui::Frame,
     filter: &FilterState,
     theme: &Theme,
+    field_names: &[String],
 ) {
     let screen = frame.area();
     let w = (screen.width * 80 / 100).max(50).min(screen.width);
@@ -415,7 +416,7 @@ pub(crate) fn render_filter_overlay(
     } else if filter.live_count > 0 {
         format!(" {count} result{s}", count = filter.live_count, s = if filter.live_count == 1 { "" } else { "s" })
     } else if filter.query.trim().is_empty() {
-        " Type an expression".into()
+        " Examples".into()
     } else {
         " No results".into()
     };
@@ -435,16 +436,21 @@ pub(crate) fn render_filter_overlay(
     // Results area
     let results_area = Rect::new(inner.x, inner.y + 2, inner.width, inner.height.saturating_sub(3));
 
-    let mut lines: Vec<Line> = filter
-        .live_results
-        .iter()
-        .take(results_area.height as usize)
-        .map(|s| Line::from(Span::styled(format!("  {s}"), theme.fg_style)))
-        .collect();
-
-    if lines.is_empty() && filter.live_error.is_none() && !filter.query.trim().is_empty() {
-        lines.push(Line::from(Span::styled("  (empty)", theme.fg_dim_style)));
-    }
+    let lines: Vec<Line> = if filter.query.trim().is_empty() {
+        // Show contextual examples when empty
+        render_examples(field_names, theme, results_area.height as usize)
+    } else if !filter.live_results.is_empty() {
+        filter
+            .live_results
+            .iter()
+            .take(results_area.height as usize)
+            .map(|s| Line::from(Span::styled(format!("  {s}"), theme.fg_style)))
+            .collect()
+    } else if filter.live_error.is_some() {
+        vec![]
+    } else {
+        vec![Line::from(Span::styled("  (empty)", theme.fg_dim_style))]
+    };
 
     frame.render_widget(
         ratatui::widgets::Paragraph::new(lines).style(theme.bg_style),
@@ -521,6 +527,39 @@ pub(crate) fn render_suggestions(
 // ---------------------------------------------------------------------------
 // Suggestion engine
 // ---------------------------------------------------------------------------
+
+fn render_examples<'a>(fields: &[String], theme: &'a Theme, max_lines: usize) -> Vec<Line<'a>> {
+    let mut lines = Vec::new();
+    lines.push(Line::from(""));
+
+    // Pick a field name for examples (first non-trivial one, or fallback)
+    let sample_field = fields
+        .iter()
+        .find(|f| f.as_str() != ".")
+        .map(|s| s.as_str())
+        .unwrap_or("name");
+
+    let examples: Vec<(&str, String)> = vec![
+        ("count items", ". | length".into()),
+        ("list all values", format!(".[] | .{sample_field}")),
+        ("show structure", ".[0] | keys".into()),
+        ("filter", format!(".[] | select(.{sample_field} != null)")),
+        ("sort", format!("sort_by(.{sample_field})")),
+        ("extract field", format!("map(.{sample_field})")),
+        ("unique values", format!("map(.{sample_field}) | unique")),
+        ("first 5 items", ".[0:5]".into()),
+        ("reverse", ". | reverse".into()),
+    ];
+
+    for (desc, expr) in examples.iter().take(max_lines.saturating_sub(2)) {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {expr}"), theme.fg_style),
+            Span::styled(format!("  \u{2190} {desc}"), theme.fg_dim_style),
+        ]));
+    }
+
+    lines
+}
 
 const BUILTINS: &[&str] = &[
     "length", "keys", "values", "type", "flatten",
