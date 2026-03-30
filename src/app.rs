@@ -947,8 +947,14 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
             }
             ViewAction::None
         }
-        // All other actions are view-local
-        other => app.active_view_mut().handle_action(other),
+        // All other actions are view-local — route to the visible view
+        other => {
+            if (app.filter.active || app.filter.has_result())
+                && let Some(ref mut res) = app.filter.result {
+                    return res.view.handle_action(other);
+                }
+            app.active_view_mut().handle_action(other)
+        }
     }
 }
 
