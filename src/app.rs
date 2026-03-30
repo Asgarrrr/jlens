@@ -276,40 +276,97 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
     }
 }
 
-/// Run reading JSON from stdin.
+/// Run reading JSON from stdin with progress indicator.
 pub fn run_stdin(theme: Theme) -> Result<()> {
     use std::io::Read;
-    let mut buf = String::new();
-    std::io::stdin()
-        .read_to_string(&mut buf)
-        .context("Failed to read from stdin")?;
 
-    let start = std::time::Instant::now();
-    let value: serde_json::Value = match serde_json::from_str(&buf) {
-        Ok(v) => v,
-        Err(err) => {
-            eprintln!("\x1b[1;31merror\x1b[0m: invalid JSON from stdin");
-            eprintln!("  --> line {}, column {}", err.line(), err.column());
-            eprintln!("  {}", err);
-            if let Some(error_line) = buf.lines().nth(err.line().saturating_sub(1)) {
-                eprintln!();
-                eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", err.line(), error_line);
-                if err.column() > 0 {
-                    eprintln!(
-                        "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
-                        " ".repeat(err.column().saturating_sub(1))
-                    );
-                }
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 64 * 1024];
+    let mut total = 0usize;
+    let spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+    loop {
+        match std::io::stdin().read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                total += n;
+                let s = spinner[(total / 65536) % spinner.len()];
+                eprint!("\r\x1b[2m{} Reading stdin... {}\x1b[0m", s, format_bytes(total));
             }
-            std::process::exit(1);
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e).context("Failed to read from stdin"),
         }
-    };
-    let parse_time = start.elapsed();
+    }
 
-    let source_size = buf.len() as u64;
+    if total > 0 {
+        eprint!("\r\x1b[2K"); // clear progress line
+    }
+
+    let text = String::from_utf8(buf).context("stdin is not valid UTF-8")?;
+    let start = std::time::Instant::now();
+
+    // Try single JSON value first, then JSON Lines fallback.
+    let value: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(single_err) => match try_json_lines(&text) {
+            Some(v) => v,
+            None => {
+                eprintln!("\x1b[1;31merror\x1b[0m: invalid JSON from stdin");
+                eprintln!("  --> line {}, column {}", single_err.line(), single_err.column());
+                eprintln!("  {}", single_err);
+                if let Some(error_line) = text.lines().nth(single_err.line().saturating_sub(1)) {
+                    eprintln!();
+                    eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", single_err.line(), error_line);
+                    if single_err.column() > 0 {
+                        eprintln!(
+                            "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
+                            " ".repeat(single_err.column().saturating_sub(1))
+                        );
+                    }
+                }
+                std::process::exit(1);
+            }
+        },
+    };
+
+    let parse_time = start.elapsed();
+    let source_size = text.len() as u64;
     let document =
         crate::model::node::DocumentBuilder::from_serde_value(value, None, source_size, parse_time);
     run_with_document(Arc::new(document), None, theme)
+}
+
+/// Try parsing input as JSON Lines (one JSON value per line).
+fn try_json_lines(text: &str) -> Option<serde_json::Value> {
+    let mut values = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match serde_json::from_str(trimmed) {
+            Ok(v) => values.push(v),
+            Err(_) => return None,
+        }
+    }
+    if values.len() >= 2 {
+        Some(serde_json::Value::Array(values))
+    } else {
+        None
+    }
+}
+
+fn format_bytes(bytes: usize) -> String {
+    if bytes < 1024 {
+        format!("{} B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
 }
 
 fn run_with_document(
