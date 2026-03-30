@@ -464,8 +464,6 @@ pub(crate) fn update_suggestions(
     doc: &JsonDocument,
     root: crate::model::node::NodeId,
 ) {
-    filter.suggestion_idx = 0;
-
     let query = &filter.query;
     if query.is_empty() {
         filter.suggestions = vec![".".into()];
