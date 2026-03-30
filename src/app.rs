@@ -67,6 +67,9 @@ struct App {
     /// When set, the document was loaded lazily and stubs can be expanded.
     lazy_doc: Option<LazyDocument>,
     zoom_stack: Vec<NodeId>,
+    show_preview: bool,
+    preview_height_pct: u16,
+    preview_cache: Option<(NodeId, crate::preview::PreviewContent)>,
 }
 
 impl App {
@@ -96,6 +99,9 @@ impl App {
             filter: FilterState::new(),
             lazy_doc: None,
             zoom_stack: Vec::new(),
+            show_preview: false,
+            preview_height_pct: 30,
+            preview_cache: None,
         }
     }
 
@@ -438,14 +444,28 @@ fn run_app(
             terminal.draw(|frame| {
                 let [toolbar, main_area_full, status] = ui::layout(frame.area());
 
-                // Reserve 1 line at the bottom of the main area for search, export, or filter bar.
+                // Split main_area_full into content + preview (if active).
+                let (content_area, preview_area) = if app.show_preview {
+                    let preview_rows =
+                        (main_area_full.height * app.preview_height_pct / 100).max(3);
+                    let [content, preview] = Layout::vertical([
+                        Constraint::Min(3),
+                        Constraint::Length(preview_rows),
+                    ])
+                    .areas(main_area_full);
+                    (content, Some(preview))
+                } else {
+                    (main_area_full, None)
+                };
+
+                // Reserve 1 line at the bottom of the content area for search, export, or filter bar.
                 let needs_bottom_bar = app.search.active || app.export.active || app.filter.active;
                 let (main_area, bottom_bar) = if needs_bottom_bar {
                     let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
-                        .areas(main_area_full);
+                        .areas(content_area);
                     (main, Some(bar))
                 } else {
-                    (main_area_full, None)
+                    (content_area, None)
                 };
 
                 app.last_main_area = main_area;
@@ -494,6 +514,28 @@ fn run_app(
                         },
                         area,
                     );
+                }
+
+                // Preview pane
+                if let Some(preview_area) = preview_area {
+                    let selected_id = app.tree_view.selected_node_id();
+                    let cache_valid = app
+                        .preview_cache
+                        .as_ref()
+                        .is_some_and(|(id, _)| Some(*id) == selected_id);
+
+                    if !cache_valid {
+                        if let Some(id) = selected_id {
+                            let content = crate::preview::analyze(&app.document, id);
+                            app.preview_cache = Some((id, content));
+                        } else {
+                            app.preview_cache = None;
+                        }
+                    }
+
+                    if let Some((_, ref content)) = app.preview_cache {
+                        crate::preview::render(content, frame, preview_area, &app.theme);
+                    }
                 }
 
                 let status_info = if app.filter.showing_result {
@@ -746,6 +788,25 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
         }
         Action::ZoomOut => {
             app.zoom_out();
+            ViewAction::None
+        }
+        Action::TogglePreview => {
+            app.show_preview = !app.show_preview;
+            if app.show_preview {
+                app.preview_cache = None; // force refresh
+            }
+            ViewAction::None
+        }
+        Action::PreviewGrow => {
+            if app.show_preview && app.preview_height_pct < 80 {
+                app.preview_height_pct += 5;
+            }
+            ViewAction::None
+        }
+        Action::PreviewShrink => {
+            if app.show_preview && app.preview_height_pct > 10 {
+                app.preview_height_pct -= 5;
+            }
             ViewAction::None
         }
         // All other actions are view-local

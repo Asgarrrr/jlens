@@ -37,6 +37,11 @@ pub(crate) enum Action {
     ZoomIn,
     ZoomOut,
 
+    // Preview
+    TogglePreview,
+    PreviewGrow,
+    PreviewShrink,
+
     // Global
     Quit,
     SwitchView(u8), // 1-5
@@ -123,6 +128,11 @@ impl Default for KeyMap {
             // Zoom
             (KeyModifiers::NONE, Char('z'), ZoomIn),
             (KeyModifiers::SHIFT, Char('Z'), ZoomOut),
+            // Preview
+            (KeyModifiers::NONE, Char('p'), TogglePreview),
+            (KeyModifiers::NONE, Char('+'), PreviewGrow),
+            (KeyModifiers::NONE, Char('-'), PreviewShrink),
+            (KeyModifiers::SHIFT, Char('+'), PreviewGrow),
             // Global
             (KeyModifiers::NONE, Char('q'), Quit),
             (KeyModifiers::CONTROL, Char('c'), Quit),
@@ -165,6 +175,9 @@ fn parse_action(name: &str) -> Option<Action> {
         "copy_path" => Action::CopyPath,
         "zoom_in" => Action::ZoomIn,
         "zoom_out" => Action::ZoomOut,
+        "toggle_preview" => Action::TogglePreview,
+        "preview_grow" => Action::PreviewGrow,
+        "preview_shrink" => Action::PreviewShrink,
         "quit" => Action::Quit,
         "search" => Action::StartSearch,
         "next_search_hit" => Action::NextSearchHit,

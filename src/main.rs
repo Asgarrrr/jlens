@@ -6,6 +6,7 @@ mod filter;
 mod keymap;
 mod model;
 mod parser;
+mod preview;
 mod search;
 mod theme;
 mod ui;
