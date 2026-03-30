@@ -248,21 +248,6 @@ impl App {
         self.active_view_mut().click_row(row_in_viewport);
     }
 
-    fn update_viewport_height(&mut self, height: usize) {
-        self.last_viewport_height = height;
-        let views: [Option<&mut dyn View>; 6] = [
-            Some(&mut self.tree_view),
-            self.raw_view.as_mut().map(|v| v as &mut dyn View),
-            self.table_view.as_mut().map(|v| v as &mut dyn View),
-            self.path_view.as_mut().map(|v| v as &mut dyn View),
-            self.stats_view.as_mut().map(|v| v as &mut dyn View),
-            self.filter.result.as_mut().map(|r| &mut r.view as &mut dyn View),
-        ];
-        for view in views.into_iter().flatten() {
-            view.set_viewport_height(height);
-        }
-    }
-
     fn run_search(&mut self) {
         self.search.dirty = false;
         let opts = SearchOptions {
@@ -451,9 +436,9 @@ fn run_app(
         if app.needs_redraw {
             app.needs_redraw = false;
             terminal.draw(|frame| {
-                let [toolbar, main_area_full, status] = ui::layout(frame.area());
+                let main_area_full = frame.area();
 
-                // Split main_area_full into content (left) + preview (right) if active.
+                // Split into content (left) + preview (right) if active.
                 let (content_area, preview_area) = if app.show_preview
                     && app.active_mode == ViewMode::Tree
                 {
@@ -472,7 +457,7 @@ fn run_app(
                 // Reserve 1 line at the bottom for search or export bar.
                 // Filter uses a centered overlay instead.
                 let needs_bottom_bar = app.search.active || app.export.active;
-                let (main_area, bottom_bar) = if needs_bottom_bar {
+                let (_main_area, bottom_bar) = if needs_bottom_bar {
                     let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
                         .areas(content_area);
                     (main, Some(bar))
@@ -480,14 +465,23 @@ fn run_app(
                     (content_area, None)
                 };
 
-                app.last_status_area = status;
+                app.last_status_area = Rect::new(
+                    main_area_full.x,
+                    main_area_full.y + main_area_full.height.saturating_sub(1),
+                    main_area_full.width,
+                    1,
+                );
 
-                ui::render_toolbar(frame, toolbar, app.active_mode, &app.theme);
-
-                // Main view — no border, content fills the area directly
-                app.last_main_area = main_area;
-                app.update_viewport_height(main_area.height as usize);
-                let inner = main_area;
+                // Single bordered block with tabs as title, status as footer
+                let view_block = ui::build_main_block(
+                    app.active_mode,
+                    !app.filter.active && app.filter.has_result(),
+                    &app.zoom_stack,
+                    &app.document,
+                    &app.theme,
+                );
+                let inner = view_block.inner(main_area_full);
+                frame.render_widget(view_block, main_area_full);
 
                 // Render the active view (or filtered result)
                 if app.filter.active {
@@ -551,35 +545,16 @@ fn run_app(
                     }
                 }
 
-                let status_info = if app.filter.has_result() {
-                    app.filter
-                        .result
-                        .as_ref()
-                        .map(|r| r.view.status_info())
-                        .unwrap_or_else(|| crate::views::StatusInfo {
-                            cursor_path: "$".to_string(),
-                            extra: None,
-                        })
-                } else {
-                    app.active_view().status_info()
-                };
-                let metadata = app.document.metadata();
-                // Prepend filter indicator to flash message when showing results.
-                let filter_indicator: Option<String> = if app.filter.has_result() {
-                    Some(format!("[Filter: {}]", app.filter.query))
-                } else {
-                    None
-                };
-                let flash = app
-                    .flash_message
-                    .as_ref()
-                    .map(|(msg, _)| msg.as_str())
-                    .or(filter_indicator.as_deref());
+                // Filter input replaces the Block's bottom border area
                 if app.filter.active {
-                    filter::render_filter_input(frame, &app.filter, status, &app.theme);
-                    filter::render_filter_suggestions(frame, &app.filter, status, &app.theme);
-                } else {
-                    ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
+                    let filter_area = Rect::new(
+                        main_area_full.x + 1,
+                        main_area_full.y + main_area_full.height.saturating_sub(1),
+                        main_area_full.width.saturating_sub(2),
+                        1,
+                    );
+                    filter::render_filter_input(frame, &app.filter, filter_area, &app.theme);
+                    filter::render_filter_suggestions(frame, &app.filter, filter_area, &app.theme);
                 }
 
                 if app.show_help {

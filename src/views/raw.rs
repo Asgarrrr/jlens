@@ -114,7 +114,6 @@ impl View for RawView {
         };
         StatusInfo {
             cursor_path: format!("line {}/{}", pos, self.total_lines()),
-            extra: None,
         }
     }
 

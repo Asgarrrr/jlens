@@ -40,10 +40,6 @@ pub struct Theme {
     // Status bar
     pub status_style: Style,
     pub status_fg_style: Style,
-    pub status_dim_style: Style,
-
-    // Flash
-    pub flash_style: Style,
 
     // Search
     pub search_match: Style,
@@ -90,8 +86,6 @@ impl Theme {
         let status_bg = Color::Rgb(30, 30, 46);
         let status_fg = Color::Rgb(147, 153, 178);
         let tree_guide = Color::Rgb(88, 91, 112);
-        let flash_bg = Color::Rgb(166, 227, 161);
-        let flash_fg = Color::Rgb(30, 30, 46);
 
         Self {
             bg,
@@ -126,9 +120,6 @@ impl Theme {
 
             status_style: Style::new().bg(status_bg),
             status_fg_style: Style::new().fg(status_fg).bg(status_bg),
-            status_dim_style: Style::new().fg(fg_dim).bg(status_bg),
-
-            flash_style: Style::new().fg(flash_fg).bg(flash_bg),
 
             search_match: Style::new()
                 .bg(Color::Rgb(249, 226, 175))
@@ -173,8 +164,6 @@ impl Theme {
         let status_bg = Color::Rgb(220, 224, 232);
         let status_fg = Color::Rgb(108, 111, 133);
         let tree_guide = Color::Rgb(156, 160, 176);
-        let flash_bg = Color::Rgb(64, 160, 43);
-        let flash_fg = Color::Rgb(239, 241, 245);
 
         Self {
             bg,
@@ -209,9 +198,6 @@ impl Theme {
 
             status_style: Style::new().bg(status_bg),
             status_fg_style: Style::new().fg(status_fg).bg(status_bg),
-            status_dim_style: Style::new().fg(fg_dim).bg(status_bg),
-
-            flash_style: Style::new().fg(flash_fg).bg(flash_bg),
 
             search_match: Style::new()
                 .bg(Color::Rgb(223, 142, 29))

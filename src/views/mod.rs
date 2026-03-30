@@ -14,7 +14,6 @@ use crate::theme::Theme;
 /// Information displayed in the status bar, provided by the active view.
 pub(crate) struct StatusInfo {
     pub(crate) cursor_path: String,
-    pub(crate) extra: Option<String>,
 }
 
 /// Actions returned by views to communicate intent to the app layer.

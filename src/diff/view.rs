@@ -337,11 +337,8 @@ impl View for DiffView {
     }
 
     fn status_info(&self) -> StatusInfo {
-        let stats = &self.result.stats;
-        let extra = format!("+{} -{} ~{}", stats.added, stats.removed, stats.modified);
         StatusInfo {
             cursor_path: format!("diff ({}/{})", self.scroll.selected + 1, self.rows.len()),
-            extra: Some(extra),
         }
     }
 

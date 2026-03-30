@@ -564,20 +564,12 @@ impl View for TreeView {
     fn status_info(&self) -> StatusInfo {
         if let Some(row) = self.visible_rows.get(self.selected) {
             let path = self.document.path_of(row.node_id);
-            let node = self.document.node(row.node_id);
-            let extra = match &node.value {
-                JsonValue::Array(_) => Some(format!("array[{}]", node.value.child_count())),
-                JsonValue::Object(_) => Some(format!("object{{{}}}", node.value.child_count())),
-                _ => Some(node.value.type_name().to_string()),
-            };
             StatusInfo {
                 cursor_path: path,
-                extra,
             }
         } else {
             StatusInfo {
                 cursor_path: "$".to_string(),
-                extra: None,
             }
         }
     }

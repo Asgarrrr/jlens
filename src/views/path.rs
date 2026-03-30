@@ -108,20 +108,13 @@ impl View for PathView {
     }
 
     fn status_info(&self) -> StatusInfo {
-        let total = self.entries.len();
         let path = self
             .entries
             .get(self.scroll.selected)
             .map(|e| e.path.clone())
             .unwrap_or_else(|| "$".to_string());
-        let pos = if total == 0 {
-            0
-        } else {
-            self.scroll.selected + 1
-        };
         StatusInfo {
             cursor_path: path,
-            extra: Some(format!("{}/{} leaves", pos, total)),
         }
     }
 

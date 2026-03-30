@@ -1,132 +1,53 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::widgets::{Block, Scrollbar, ScrollbarOrientation, ScrollbarState};
 
-use crate::model::node::DocumentMetadata;
+use crate::model::node::{JsonDocument, NodeId};
 use crate::theme::Theme;
-use crate::util::format_count;
-use crate::views::{StatusInfo, ViewMode};
+use crate::views::ViewMode;
 
-/// Top-level layout: `[toolbar, main, status]`.
+/// Layout for diff mode: `[toolbar, main, status]`.
 pub fn layout(area: Rect) -> [Rect; 3] {
-    Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(1),
-        Constraint::Length(1),
-    ])
-    .areas(area)
+    Layout::vertical([Constraint::Length(1), Constraint::Min(1), Constraint::Length(1)]).areas(area)
 }
 
-/// Render the toolbar with view mode tabs.
-pub fn render_toolbar(frame: &mut Frame, area: Rect, active_mode: ViewMode, theme: &Theme) {
-    let mut spans: Vec<Span> = Vec::new();
-
-    spans.push(Span::styled(" jlens ", theme.toolbar_brand_style));
-    spans.push(Span::styled("  ", theme.toolbar_bg_style));
-
+/// Build the main bordered block with tabs in the title and status in the footer.
+pub fn build_main_block<'a>(
+    active_mode: ViewMode,
+    filter_active: bool,
+    zoom_stack: &[NodeId],
+    document: &JsonDocument,
+    theme: &'a Theme,
+) -> Block<'a> {
+    // Title: tabs
+    let mut title_spans = vec![
+        Span::styled(" jlens ", theme.toolbar_brand_style),
+        Span::raw(" "),
+    ];
     for &mode in &ViewMode::ALL {
-        let is_active = mode == active_mode;
-        if is_active {
-            spans.push(Span::styled(" \u{25cf} ", theme.toolbar_active_style));
-            spans.push(Span::styled(
-                format!("{} ", mode.label()),
-                theme.toolbar_active_style,
-            ));
+        if mode == active_mode && !filter_active {
+            title_spans.push(Span::styled(format!(" \u{25cf} {} ", mode.label()), theme.toolbar_active_style));
         } else {
-            spans.push(Span::styled(
-                format!("  {} ", mode.label()),
-                theme.fg_dim_style,
-            ));
+            title_spans.push(Span::styled(format!("  {}  ", mode.label()), theme.fg_dim_style));
         }
     }
 
-    // Right-align "? Help" hint
-    let used_width: usize = spans
-        .iter()
-        .map(|s| crate::util::display_width(&s.content))
-        .sum();
-    let help_text = "? Help ";
-    let help_width = crate::util::display_width(help_text);
-    let total_width = area.width as usize;
-    let padding = total_width.saturating_sub(used_width + help_width);
-    spans.push(Span::styled(" ".repeat(padding), theme.toolbar_bg_style));
-    spans.push(Span::styled(help_text, theme.fg_dim_style));
-
-    let line = Line::from(spans).style(theme.toolbar_bg_style);
-    let paragraph = ratatui::widgets::Paragraph::new(line);
-    frame.render_widget(paragraph, area);
-}
-
-/// Render the status bar with cursor path and document info.
-pub fn render_status_bar(
-    frame: &mut Frame,
-    area: Rect,
-    status: &StatusInfo,
-    metadata: &DocumentMetadata,
-    flash_message: Option<&str>,
-    theme: &Theme,
-) {
-    // Flash message takes over the entire status bar briefly
-    if let Some(msg) = flash_message {
-        use ratatui::style::Modifier;
-        let line = Line::from(Span::styled(
-            format!(" {} ", msg),
-            theme.flash_style.add_modifier(Modifier::BOLD),
-        ))
-        .style(theme.flash_style);
-        let paragraph = ratatui::widgets::Paragraph::new(line);
-        frame.render_widget(paragraph, area);
-        return;
-    }
-    let file_name = metadata
-        .source_path
-        .as_ref()
-        .and_then(|p| p.file_name())
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "stdin".to_string());
-
-    let size_str = humansize::format_size(metadata.source_size, humansize::BINARY);
-    let nodes_str = format_count(metadata.total_nodes);
-    let depth_str = metadata.max_depth.to_string();
-    let parse_ms = metadata.parse_time.as_millis();
-
-    let right = format!(
-        " {} | {} nodes | d:{} | {}ms ",
-        size_str, nodes_str, depth_str, parse_ms,
-    );
-
-    let mut spans = Vec::new();
-
-    // Left: cursor path (rendered as colored breadcrumb for JSON paths)
-    spans.extend(breadcrumb_spans(&status.cursor_path, theme));
-
-    if let Some(ref extra) = status.extra {
-        spans.push(Span::styled(format!(" {} ", extra), theme.status_fg_style));
+    if !zoom_stack.is_empty() {
+        let path = document.path_of(*zoom_stack.last().unwrap());
+        title_spans.push(Span::styled(format!(" zoom:{path} "), theme.fg_dim_style));
     }
 
-    // Calculate padding (use display width for correct Unicode handling)
-    let left_width: usize = spans
-        .iter()
-        .map(|s| crate::util::display_width(&s.content))
-        .sum();
-    let right_width = crate::util::display_width(&right);
-    let total_width = area.width as usize;
-    let padding = total_width.saturating_sub(left_width + right_width);
+    if filter_active {
+        title_spans.push(Span::styled(" \u{25cf} Filter ", theme.toolbar_active_style));
+    }
 
-    spans.push(Span::styled(" ".repeat(padding), theme.status_style));
-
-    // Right: file info
-    spans.push(Span::styled(
-        format!(" {} ", file_name),
-        theme.status_fg_style,
-    ));
-    spans.push(Span::styled(right, theme.status_dim_style));
-
-    let line = Line::from(spans).style(theme.status_style);
-    let paragraph = ratatui::widgets::Paragraph::new(line);
-    frame.render_widget(paragraph, area);
+    Block::bordered()
+        .title(Line::from(title_spans))
+        .border_style(theme.tree_guide_style)
+        .style(theme.bg_style)
 }
+
 
 /// Render the help overlay centered in the given area.
 pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
@@ -222,81 +143,6 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
     frame.render_widget(paragraph, overlay);
 }
 
-/// Parse a JSON path (e.g. `$.users[0].name`) into colored breadcrumb spans.
-/// Non-path strings are rendered as plain text with the toolbar style.
-fn breadcrumb_spans(path: &str, theme: &Theme) -> Vec<Span<'static>> {
-    use ratatui::style::{Modifier, Style};
-    // Extract raw colors from pre-computed composite styles.
-    let bg = theme.toolbar_active_style.bg.unwrap_or(theme.bg);
-    let toolbar_active_fg = theme.toolbar_active_style.fg.unwrap_or(theme.fg);
-    let sep_fg = theme.toolbar_inactive_style.fg.unwrap_or(theme.fg_dim);
-    let bold = Modifier::BOLD;
-
-    if !path.starts_with('$') {
-        return vec![Span::styled(
-            format!(" {} ", path),
-            theme.toolbar_brand_style,
-        )];
-    }
-
-    let key_fg = theme.key.fg.unwrap_or(toolbar_active_fg);
-    let idx_fg = theme.number.fg.unwrap_or(toolbar_active_fg);
-
-    let mut spans = vec![Span::styled(" ", Style::new().bg(bg))];
-    let mut chars = path.chars().peekable();
-
-    // "$" root
-    if chars.peek() == Some(&'$') {
-        chars.next();
-        spans.push(Span::styled("$", Style::new().fg(sep_fg).bg(bg)));
-    }
-
-    while let Some(&ch) = chars.peek() {
-        match ch {
-            '.' => {
-                chars.next();
-                spans.push(Span::styled(".", Style::new().fg(sep_fg).bg(bg)));
-                let mut key = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c == '.' || c == '[' {
-                        break;
-                    }
-                    key.push(chars.next().unwrap());
-                }
-                if !key.is_empty() {
-                    spans.push(Span::styled(
-                        key,
-                        Style::new().fg(key_fg).bg(bg).add_modifier(bold),
-                    ));
-                }
-            }
-            '[' => {
-                let mut bracket = String::new();
-                while let Some(&c) = chars.peek() {
-                    bracket.push(chars.next().unwrap());
-                    if c == ']' {
-                        break;
-                    }
-                }
-                let fg = if bracket.contains('"') {
-                    key_fg
-                } else {
-                    idx_fg
-                };
-                spans.push(Span::styled(bracket, Style::new().fg(fg).bg(bg)));
-            }
-            _ => {
-                spans.push(Span::styled(
-                    chars.next().unwrap().to_string(),
-                    theme.toolbar_active_style,
-                ));
-            }
-        }
-    }
-
-    spans.push(Span::styled(" ", Style::new().bg(bg)));
-    spans
-}
 
 /// Determine which breadcrumb segment index was clicked given the mouse x and area x.
 /// Returns the 0-based segment index (0 = root "$", 1 = first key/index, etc.)

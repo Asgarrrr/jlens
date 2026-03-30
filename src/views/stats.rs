@@ -119,7 +119,6 @@ impl View for StatsView {
     fn status_info(&self) -> StatusInfo {
         StatusInfo {
             cursor_path: "Document Statistics".to_string(),
-            extra: None,
         }
     }
 

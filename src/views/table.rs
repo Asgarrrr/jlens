@@ -289,21 +289,8 @@ impl View for TableView {
 
     fn status_info(&self) -> StatusInfo {
         let total = self.rows.len();
-        let extra = if let Some(col) = self.sort_column {
-            let col_name = self.columns.get(col).map(|c| c.as_ref()).unwrap_or("?");
-            let dir = if self.sort_ascending { "asc" } else { "desc" };
-            format!(
-                "{} columns | sorted by {} ({})",
-                self.columns.len(),
-                col_name,
-                dir
-            )
-        } else {
-            format!("{} columns", self.columns.len())
-        };
         StatusInfo {
             cursor_path: format!("row {}/{}", self.scroll.selected + 1, total),
-            extra: Some(extra),
         }
     }
 
