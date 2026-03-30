@@ -530,7 +530,6 @@ fn run_app(
                 // Split inner into view (left) + preview (right) if active
                 let (view_area, preview_area) = if app.show_preview
                     && app.active_mode == ViewMode::Tree
-                    && !app.filter.active
                 {
                     let preview_cols = (inner.width * app.preview_pct / 100).max(20);
                     let [left, right] = Layout::horizontal([
