@@ -78,10 +78,11 @@ fn infer_array_items(
     sample: &[NodeId],
     total: usize,
 ) -> SchemaNode {
+    let sample_count = sample.len();
     let mut merged = SchemaNode {
-        name: "[item]".into(),
+        name: format!("[item] \u{00d7}{total}"),
         types: HashMap::new(),
-        total_seen: total,
+        total_seen: sample_count,
         children: Vec::new(),
     };
 
@@ -110,8 +111,8 @@ fn infer_array_items(
     let mut children: Vec<SchemaNode> = field_stats
         .into_iter()
         .map(|(name, (types, seen))| {
-            // Scale seen count to total array size
-            let scaled_seen = (seen as f64 / sample.len() as f64 * total as f64) as usize;
+            // Use sample-relative presence (don't scale — the sample IS representative)
+            let scaled_seen = seen.min(sample_count);
             SchemaNode {
                 name,
                 types,
