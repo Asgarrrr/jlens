@@ -53,6 +53,7 @@ struct App {
     path_view: Option<PathView>,
     stats_view: Option<StatsView>,
     schema_view: Option<crate::views::schema::SchemaView>,
+    graph_view: Option<crate::views::graph::GraphView>,
     last_viewport_height: usize,
     search: SearchState,
     clipboard: Option<arboard::Clipboard>,
@@ -99,6 +100,7 @@ impl App {
             path_view: None,
             stats_view: None,
             schema_view: None,
+            graph_view: None,
             last_viewport_height: 0,
             search: SearchState::new(),
             clipboard: arboard::Clipboard::new().ok(),
@@ -159,6 +161,7 @@ impl App {
         self.path_view = None;
         self.stats_view = None;
         self.schema_view = None;
+        self.graph_view = None;
         self.preview_cache = None;
         self.filter_value_cache = None;
         self.filter_fields_cache = None;
@@ -194,6 +197,7 @@ impl App {
         self.path_view = None;
         self.stats_view = None;
         self.schema_view = None;
+        self.graph_view = None;
 
         // Update stub IDs.
         let stubs: HashSet<NodeId> = lazy.stub_ids().collect();
@@ -241,6 +245,12 @@ impl App {
                     self.schema_view = Some(v);
                 }
             }
+            ViewMode::Graph => {
+                if self.graph_view.is_none() {
+                    let root = self.effective_root();
+                    self.graph_view = Some(crate::views::graph::GraphView::new(Arc::clone(&self.document), root));
+                }
+            }
         }
     }
 
@@ -252,6 +262,7 @@ impl App {
             ViewMode::Paths => self.path_view.as_ref().expect("view not initialized"),
             ViewMode::Stats => self.stats_view.as_ref().expect("view not initialized"),
             ViewMode::Schema => self.schema_view.as_ref().expect("view not initialized"),
+            ViewMode::Graph => self.graph_view.as_ref().expect("view not initialized"),
         }
     }
 
@@ -263,6 +274,7 @@ impl App {
             ViewMode::Paths => self.path_view.as_mut().expect("view not initialized"),
             ViewMode::Stats => self.stats_view.as_mut().expect("view not initialized"),
             ViewMode::Schema => self.schema_view.as_mut().expect("view not initialized"),
+            ViewMode::Graph => self.graph_view.as_mut().expect("view not initialized"),
         }
     }
 
@@ -455,6 +467,7 @@ fn run_app(
         "paths" => ViewMode::Paths,
         "stats" => ViewMode::Stats,
         "schema" => ViewMode::Schema,
+        "graph" => ViewMode::Graph,
         _ => ViewMode::Tree,
     };
     let mut app = App::new(document, opts.theme, opts.keymap);
@@ -522,6 +535,7 @@ fn run_app(
                     if let Some(ref mut v) = app.path_view   { v.set_viewport_height(new_height); }
                     if let Some(ref mut v) = app.stats_view  { v.set_viewport_height(new_height); }
                     if let Some(ref mut v) = app.schema_view { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.graph_view  { v.set_viewport_height(new_height); }
                     if let Some(ref mut res) = app.filter.result {
                         res.view.set_viewport_height(new_height);
                     }
@@ -941,6 +955,7 @@ fn dispatch_action(app: &mut App, action: Action) -> ViewAction {
                 4 => crate::views::ViewMode::Paths,
                 5 => crate::views::ViewMode::Stats,
                 6 => crate::views::ViewMode::Schema,
+                7 => crate::views::ViewMode::Graph,
                 _ => return ViewAction::None,
             };
             ViewAction::SwitchView(mode)

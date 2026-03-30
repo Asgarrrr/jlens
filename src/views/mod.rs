@@ -1,3 +1,4 @@
+pub mod graph;
 pub mod path;
 pub mod raw;
 pub mod schema;
@@ -42,16 +43,18 @@ pub(crate) enum ViewMode {
     Paths,
     Stats,
     Schema,
+    Graph,
 }
 
 impl ViewMode {
-    pub(crate) const ALL: [ViewMode; 6] = [
+    pub(crate) const ALL: [ViewMode; 7] = [
         ViewMode::Tree,
         ViewMode::Table,
         ViewMode::Raw,
         ViewMode::Paths,
         ViewMode::Stats,
         ViewMode::Schema,
+        ViewMode::Graph,
     ];
 
     pub(crate) fn label(self) -> &'static str {
@@ -62,6 +65,7 @@ impl ViewMode {
             ViewMode::Paths => "Paths",
             ViewMode::Stats => "Stats",
             ViewMode::Schema => "Schema",
+            ViewMode::Graph => "Graph",
         }
     }
 
