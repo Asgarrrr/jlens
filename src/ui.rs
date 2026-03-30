@@ -16,6 +16,7 @@ pub fn layout(area: Rect) -> [Rect; 3] {
 pub fn build_main_block<'a>(
     active_mode: ViewMode,
     filter_active: bool,
+    view_focused: bool,
     zoom_stack: &[NodeId],
     document: &JsonDocument,
     theme: &'a Theme,
@@ -38,9 +39,10 @@ pub fn build_main_block<'a>(
         title_spans.push(Span::styled(format!(" {path} "), theme.fg_dim_style));
     }
 
+    let border = if view_focused { theme.fg_style } else { theme.tree_guide_style };
     Block::bordered()
         .title(Line::from(title_spans))
-        .border_style(theme.tree_guide_style)
+        .border_style(border)
         .style(theme.bg_style)
 }
 

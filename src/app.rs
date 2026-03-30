@@ -35,9 +35,11 @@ use export::{ExportAction, ExportState};
 use filter::{FilterAction, FilterState};
 use search::{SearchAction, SearchState};
 
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Focus {
+    View,
+    Filter,
+}
 
 struct App {
     document: Arc<JsonDocument>,
@@ -57,6 +59,8 @@ struct App {
     flash_message: Option<(String, u8)>,
     show_help: bool,
     should_quit: bool,
+    /// Which pane has keyboard focus (for multi-pane mode).
+    focus: Focus,
     needs_redraw: bool,
     /// Last known main content area; updated each draw, used for mouse hit-testing.
     last_main_area: Rect,
@@ -99,6 +103,7 @@ impl App {
             flash_message: None,
             show_help: false,
             should_quit: false,
+            focus: Focus::View,
             needs_redraw: true,
             last_main_area: Rect::default(),
             last_status_area: Rect::default(),
@@ -480,6 +485,7 @@ fn run_app(
                 let view_block = ui::build_main_block(
                     app.active_mode,
                     !app.filter.active && app.filter.has_result(),
+                    app.focus == Focus::View || !app.filter.active,
                     &app.zoom_stack,
                     &app.document,
                     &app.theme,
@@ -569,7 +575,7 @@ fn run_app(
                                 app.theme.fg_dim_style,
                             ),
                         ]))
-                        .border_style(app.theme.tree_guide_style)
+                        .border_style(if app.focus == Focus::Filter { app.theme.fg_style } else { app.theme.tree_guide_style })
                         .style(app.theme.bg_style);
 
                     let filter_inner = fblock.inner(filter_block_area);
@@ -686,13 +692,31 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         return;
     }
 
-    if app.filter.active {
+    // Tab switches focus between view and filter when filter is open
+    if app.filter.active
+        && key.code == crossterm::event::KeyCode::Tab
+        && key.modifiers == crossterm::event::KeyModifiers::NONE
+    {
+        app.focus = match app.focus {
+            Focus::View => Focus::Filter,
+            Focus::Filter => Focus::View,
+        };
+        return;
+    }
+
+    // Filter pane has focus → keys go to the filter input
+    if app.filter.active && app.focus == Focus::Filter {
         match app.filter.handle_input_key(key) {
-            FilterAction::Close => app.filter.close(),
-            FilterAction::Apply => app.filter.close(), // result already computed by live evaluator
+            FilterAction::Close => {
+                app.filter.close();
+                app.focus = Focus::View;
+            }
+            FilterAction::Apply => {
+                app.filter.close();
+                app.focus = Focus::View;
+            }
             FilterAction::None | FilterAction::Reopen | FilterAction::DelegateToResult(_) => {}
         }
-        // Update suggestions immediately (cheap); tree rebuild is debounced via tick handler
         if app.filter.active {
             let root = app.effective_root();
             filter::update_suggestions(
@@ -705,6 +729,17 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
         return;
     }
 
+    // Filter is open but view has focus → Esc closes filter
+    if app.filter.active
+        && app.focus == Focus::View
+        && key.code == crossterm::event::KeyCode::Esc
+    {
+        app.filter.close();
+        app.focus = Focus::View;
+        return;
+    }
+
+    // Result mode (filter closed, results visible)
     if !app.filter.active && app.filter.has_result() {
         match app.filter.handle_result_key(key) {
             FilterAction::Close => app.filter.clear_result(),
@@ -947,6 +982,7 @@ fn handle_action(app: &mut App, action: ViewAction) {
         }
         ViewAction::OpenFilter => {
             app.filter.open();
+            app.focus = Focus::Filter;
         }
         ViewAction::ExpandStub(stub_id) => {
             app.expand_lazy_stub(stub_id);
