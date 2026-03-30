@@ -461,8 +461,9 @@ fn run_app(
                     (main_area_full, None)
                 };
 
-                // Reserve 1 line at the bottom of the content area for search, export, or filter bar.
-                let needs_bottom_bar = app.search.active || app.export.active || app.filter.active;
+                // Reserve 1 line at the bottom for search or export bar.
+                // Filter uses a centered overlay instead.
+                let needs_bottom_bar = app.search.active || app.export.active;
                 let (main_area, bottom_bar) = if needs_bottom_bar {
                     let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
                         .areas(content_area);
@@ -512,20 +513,8 @@ fn run_app(
                     app.active_view().render(frame, inner, &app.theme);
                 }
 
-                // Bottom bar: filter input > search > export (mutually exclusive)
-                if app.filter.active {
-                    if let Some(area) = bottom_bar {
-                        frame.render_widget(
-                            filter::FilterBar {
-                                state: &app.filter,
-                                theme: &app.theme,
-                            },
-                            area,
-                        );
-                        // Render autocomplete popup above the filter bar
-                        filter::render_suggestions(frame, &app.filter, area, &app.theme);
-                    }
-                } else if app.search.active {
+                // Bottom bar: search or export
+                if app.search.active {
                     if let Some(area) = bottom_bar {
                         frame.render_widget(
                             search::SearchBar {
@@ -597,7 +586,11 @@ fn run_app(
                     .or(filter_indicator.as_deref());
                 ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
 
-                // Help overlay (rendered last so it's on top)
+                // Overlays (rendered last, in z-order)
+                if app.filter.active {
+                    filter::render_filter_overlay(frame, &app.filter, &app.theme);
+                }
+
                 if app.show_help {
                     ui::render_help_overlay(frame, frame.area(), &app.theme);
                 }
@@ -681,10 +674,13 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             | FilterAction::ReopenInput
             | FilterAction::DelegateToResult(_) => {}
         }
-        // Update autocomplete suggestions
-        if app.filter.active && app.filter.show_suggestions {
-            let root = app.effective_root();
-            filter::update_suggestions(&mut app.filter, &app.document, root);
+        // Update autocomplete suggestions + live preview
+        if app.filter.active {
+            if app.filter.show_suggestions {
+                let root = app.effective_root();
+                filter::update_suggestions(&mut app.filter, &app.document, root);
+            }
+            filter::update_live_preview(&mut app.filter, &app.document);
         }
         return;
     }

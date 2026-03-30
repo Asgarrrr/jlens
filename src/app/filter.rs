@@ -2,10 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Widget;
 
 use crate::model::node::{DocumentBuilder, JsonDocument};
 use crate::theme::Theme;
@@ -20,10 +18,13 @@ pub(crate) struct FilterState {
     pub(crate) showing_result: bool,
     pub(crate) result_view: Option<TreeView>,
     pub(crate) result_doc: Option<Arc<JsonDocument>>,
-    /// Autocomplete suggestions for the current query context.
     pub(crate) suggestions: Vec<String>,
     pub(crate) suggestion_idx: usize,
     pub(crate) show_suggestions: bool,
+    /// Live preview of filter results (updated as user types, debounced).
+    pub(crate) live_results: Vec<String>,
+    pub(crate) live_count: usize,
+    pub(crate) live_error: Option<String>,
 }
 
 pub(crate) enum FilterAction {
@@ -47,6 +48,9 @@ impl FilterState {
             suggestions: Vec::new(),
             suggestion_idx: 0,
             show_suggestions: false,
+            live_results: Vec::new(),
+            live_count: 0,
+            live_error: None,
         }
     }
 
@@ -56,6 +60,9 @@ impl FilterState {
         self.error = None;
         self.suggestions.clear();
         self.show_suggestions = false;
+        self.live_results.clear();
+        self.live_count = 0;
+        self.live_error = None;
     }
 
     pub(crate) fn close_input(&mut self) {
@@ -209,43 +216,109 @@ pub(crate) fn run_filter(
 // Widget
 // ---------------------------------------------------------------------------
 
-pub(crate) struct FilterBar<'a> {
-    pub(crate) state: &'a FilterState,
-    pub(crate) theme: &'a Theme,
-}
+/// Render the filter as a centered overlay with live results.
+pub(crate) fn render_filter_overlay(
+    frame: &mut ratatui::Frame,
+    filter: &FilterState,
+    theme: &Theme,
+) {
+    let screen = frame.area();
+    let w = (screen.width * 80 / 100).max(50).min(screen.width);
+    let h = (screen.height * 70 / 100).max(12).min(screen.height);
+    let x = (screen.width - w) / 2;
+    let y = (screen.height - h) / 2;
+    let overlay = Rect::new(x, y, w, h);
 
-impl Widget for FilterBar<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let filter = self.state;
-        let theme = self.theme;
+    frame.render_widget(ratatui::widgets::Clear, overlay);
 
-        let mut spans = vec![Span::styled(" \u{276f} ", theme.toolbar_brand_style)];
+    let block = ratatui::widgets::Block::bordered()
+        .title(" Filter ")
+        .title_style(theme.help_title_style)
+        .border_style(theme.tree_guide_style)
+        .style(theme.bg_style);
+    let inner = block.inner(overlay);
+    frame.render_widget(block, overlay);
 
-        spans.push(Span::styled(filter.query.as_str(), theme.fg_style));
-        spans.push(Span::styled("\u{2588}", theme.input_cursor_style));
-
-        if let Some(ref err) = filter.error {
-            spans.push(Span::styled(
-                format!("  \u{26a0} {}", err),
-                theme.error_style,
-            ));
-        } else if filter.show_suggestions {
-            spans.push(Span::styled(
-                "  [Tab] accept  [\u{2191}\u{2193}] navigate  [Esc] close",
-                theme.fg_dim_style,
-            ));
-        } else {
-            spans.push(Span::styled(
-                "  [Enter] run  [Tab] suggest  [Esc] cancel",
-                theme.fg_dim_style,
-            ));
-        }
-
-        let line = Line::from(spans);
-        ratatui::widgets::Paragraph::new(line)
-            .style(theme.bg_style)
-            .render(area, buf);
+    if inner.height < 4 {
+        return;
     }
+
+    // Input line
+    let input_area = Rect::new(inner.x, inner.y, inner.width, 1);
+    let mut input_spans = vec![
+        Span::styled(" \u{276f} ", theme.toolbar_brand_style),
+        Span::styled(filter.query.as_str(), theme.fg_style),
+        Span::styled("\u{2588}", theme.input_cursor_style),
+    ];
+
+    if filter.show_suggestions {
+        input_spans.push(Span::styled(
+            "  [Tab] accept  [\u{2191}\u{2193}] nav",
+            theme.fg_dim_style,
+        ));
+    }
+
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(Line::from(input_spans)).style(theme.bg_style),
+        input_area,
+    );
+
+    // Separator
+    let sep_area = Rect::new(inner.x, inner.y + 1, inner.width, 1);
+    let result_label = if let Some(ref err) = filter.live_error {
+        format!(" \u{26a0} {err}")
+    } else if filter.live_count > 0 {
+        format!(" {count} result{s}", count = filter.live_count, s = if filter.live_count == 1 { "" } else { "s" })
+    } else if filter.query.trim().is_empty() {
+        " Type an expression".into()
+    } else {
+        " No results".into()
+    };
+
+    let sep_style = if filter.live_error.is_some() {
+        theme.error_style
+    } else {
+        theme.fg_dim_style
+    };
+
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(Line::from(Span::styled(result_label, sep_style)))
+            .style(theme.bg_style),
+        sep_area,
+    );
+
+    // Results area
+    let results_area = Rect::new(inner.x, inner.y + 2, inner.width, inner.height.saturating_sub(3));
+
+    let mut lines: Vec<Line> = filter
+        .live_results
+        .iter()
+        .take(results_area.height as usize)
+        .map(|s| Line::from(Span::styled(format!("  {s}"), theme.fg_style)))
+        .collect();
+
+    if lines.is_empty() && filter.live_error.is_none() && !filter.query.trim().is_empty() {
+        lines.push(Line::from(Span::styled("  (empty)", theme.fg_dim_style)));
+    }
+
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(lines).style(theme.bg_style),
+        results_area,
+    );
+
+    // Footer hints
+    let footer_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(Line::from(Span::styled(
+            " [Enter] apply  [Tab] suggest  [Esc] cancel",
+            theme.fg_dim_style,
+        )))
+        .style(theme.bg_style),
+        footer_area,
+    );
+
+    // Autocomplete popup on top
+    render_suggestions(frame, filter, input_area, theme);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +383,55 @@ const BUILTINS: &[&str] = &[
     "min", "max", "not", "to_number", "to_string",
     "ascii_downcase", "select", "map", "sort_by",
 ];
+
+/// Compute live preview of filter results (called on each keystroke, debounced in caller).
+pub(crate) fn update_live_preview(
+    filter: &mut FilterState,
+    document: &JsonDocument,
+) {
+    let query = filter.query.trim();
+    if query.is_empty() {
+        filter.live_results.clear();
+        filter.live_count = 0;
+        filter.live_error = None;
+        return;
+    }
+
+    let expr = match crate::filter::parse::parse(query) {
+        Ok(e) => e,
+        Err(e) => {
+            filter.live_error = Some(e.to_string());
+            filter.live_results.clear();
+            filter.live_count = 0;
+            return;
+        }
+    };
+
+    let root_value = raw::rebuild_serde_value(document, document.root());
+    match crate::filter::eval::apply(&root_value, &expr) {
+        Ok(results) => {
+            filter.live_count = results.len();
+            filter.live_error = None;
+            filter.live_results = results
+                .iter()
+                .take(20)
+                .map(|v| {
+                    let s = serde_json::to_string(v).unwrap_or_default();
+                    if s.len() > 120 {
+                        format!("{}...", &s[..117])
+                    } else {
+                        s
+                    }
+                })
+                .collect();
+        }
+        Err(e) => {
+            filter.live_error = Some(e.to_string());
+            filter.live_results.clear();
+            filter.live_count = 0;
+        }
+    }
+}
 
 /// Update suggestions based on the current query context and document.
 pub(crate) fn update_suggestions(
