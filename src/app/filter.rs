@@ -419,15 +419,17 @@ pub(crate) fn render_filter_bar(
     // Input line
     let input_area = Rect::new(area.x, area.y, area.width, 1);
     let prompt = " \u{276f} ";
+    let prompt_width = crate::util::display_width(prompt) as u16;
     let (before, after) = filter.query.split_at(filter.cursor);
     let mut spans = vec![
         Span::styled(prompt, theme.toolbar_brand_style),
         Span::styled(before, theme.fg_style),
         Span::styled(after, theme.fg_style),
+        Span::raw(" "), // space before hints
     ];
 
     // Real terminal cursor (blinking) at the correct position
-    let cursor_x = input_area.x + prompt.len() as u16 + crate::util::display_width(before) as u16;
+    let cursor_x = input_area.x + prompt_width + crate::util::display_width(before) as u16;
     frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, input_area.y));
 
     if filter.show_suggestions {
