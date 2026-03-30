@@ -471,42 +471,8 @@ fn run_app(
             terminal.draw(|frame| {
                 let main_area_full = frame.area();
 
-                // Split into content (left) + preview (right) if active.
-                let (content_area, preview_area) = if app.show_preview
-                    && app.active_mode == ViewMode::Tree
-                {
-                    let preview_cols =
-                        (main_area_full.width * app.preview_pct / 100).max(20);
-                    let [content, preview] = Layout::horizontal([
-                        Constraint::Min(20),
-                        Constraint::Length(preview_cols),
-                    ])
-                    .areas(main_area_full);
-                    (content, Some(preview))
-                } else {
-                    (main_area_full, None)
-                };
-
-                // Reserve 1 line at the bottom for search or export bar.
-                // Filter uses a centered overlay instead.
-                let needs_bottom_bar = app.search.active || app.export.active;
-                let (_main_area, bottom_bar) = if needs_bottom_bar {
-                    let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
-                        .areas(content_area);
-                    (main, Some(bar))
-                } else {
-                    (content_area, None)
-                };
-
-                app.last_status_area = Rect::new(
-                    main_area_full.x,
-                    main_area_full.y + main_area_full.height.saturating_sub(1),
-                    main_area_full.width,
-                    1,
-                );
-
-                // Split area: main block + optional filter zone at bottom
-                let (block_area, filter_zone) = if app.filter.active {
+                // Reserve bottom: filter zone (3 lines) if active
+                let (top_area, filter_zone) = if app.filter.active {
                     let [top, bottom] = Layout::vertical([
                         Constraint::Min(5),
                         Constraint::Length(3),
@@ -516,6 +482,24 @@ fn run_app(
                     (main_area_full, None)
                 };
 
+                // Reserve bottom bar for search/export
+                let needs_bottom_bar = app.search.active || app.export.active;
+                let (block_area, bottom_bar) = if needs_bottom_bar {
+                    let [main, bar] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)])
+                        .areas(top_area);
+                    (main, Some(bar))
+                } else {
+                    (top_area, None)
+                };
+
+                app.last_status_area = Rect::new(
+                    main_area_full.x,
+                    main_area_full.y + main_area_full.height.saturating_sub(1),
+                    main_area_full.width,
+                    1,
+                );
+
+                // Main block
                 let view_block = ui::build_main_block(
                     app.active_mode,
                     !app.filter.active && app.filter.has_result(),
@@ -543,19 +527,30 @@ fn run_app(
                     }
                 }
 
+                // Split inner into view (left) + preview (right) if active
+                let (view_area, preview_area) = if app.show_preview
+                    && app.active_mode == ViewMode::Tree
+                    && !app.filter.active
+                {
+                    let preview_cols = (inner.width * app.preview_pct / 100).max(20);
+                    let [left, right] = Layout::horizontal([
+                        Constraint::Min(20),
+                        Constraint::Length(preview_cols),
+                    ]).areas(inner);
+                    (left, Some(right))
+                } else {
+                    (inner, None)
+                };
+
                 // Render the active view (or filtered result)
-                if app.filter.active {
+                if app.filter.active || app.filter.has_result() {
                     if let Some(ref res) = app.filter.result {
-                        res.view.render(frame, inner, &app.theme);
+                        res.view.render(frame, view_area, &app.theme);
                     } else {
-                        app.active_view().render(frame, inner, &app.theme);
-                    }
-                } else if app.filter.has_result() {
-                    if let Some(ref res) = app.filter.result {
-                        res.view.render(frame, inner, &app.theme);
+                        app.active_view().render(frame, view_area, &app.theme);
                     }
                 } else {
-                    app.active_view().render(frame, inner, &app.theme);
+                    app.active_view().render(frame, view_area, &app.theme);
                 }
 
                 // Bottom bar: search or export
