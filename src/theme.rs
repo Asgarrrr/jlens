@@ -255,3 +255,48 @@ impl Default for Theme {
         Self::dark()
     }
 }
+
+impl Theme {
+    /// Build a theme from config: base theme + hex color overrides.
+    pub fn from_config(base: Option<&str>, overrides: &std::collections::HashMap<String, String>) -> Self {
+        let mut theme = match base {
+            Some("light") => Self::light(),
+            _ => Self::dark(),
+        };
+
+        for (key, hex) in overrides {
+            let Some(color) = parse_hex_color(hex) else {
+                eprintln!("\x1b[1;33mwarning\x1b[0m: invalid color '{hex}' for theme.overrides.{key}");
+                continue;
+            };
+            match key.as_str() {
+                "bg" => { theme.bg = color; theme.bg_style = Style::new().bg(color); }
+                "fg" => { theme.fg = color; theme.fg_style = Style::new().fg(color); }
+                "fg_dim" => { theme.fg_dim = color; theme.fg_dim_style = Style::new().fg(color); }
+                "selection_bg" => { theme.selection_bg = color; theme.selection_style = Style::new().fg(theme.fg).bg(color); }
+                "key" => { theme.key = Style::new().fg(color).add_modifier(Modifier::BOLD); }
+                "string" => { theme.string = Style::new().fg(color); }
+                "number" => { theme.number = Style::new().fg(color); }
+                "boolean" => { theme.boolean = Style::new().fg(color); }
+                "null" => { theme.null = Style::new().fg(color); }
+                "bracket" => { theme.bracket = Style::new().fg(color); }
+                _ => {
+                    eprintln!("\x1b[1;33mwarning\x1b[0m: unknown theme field '{key}'");
+                }
+            }
+        }
+
+        theme
+    }
+}
+
+fn parse_hex_color(s: &str) -> Option<Color> {
+    let s = s.strip_prefix('#')?;
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some(Color::Rgb(r, g, b))
+}

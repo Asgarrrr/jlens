@@ -69,14 +69,14 @@ struct App {
 }
 
 impl App {
-    fn new(document: Arc<JsonDocument>, theme: Theme) -> Self {
+    fn new(document: Arc<JsonDocument>, theme: Theme, keymap: KeyMap) -> Self {
         let tree_view = TreeView::new(Arc::clone(&document));
 
         Self {
             document,
             theme,
             active_mode: ViewMode::Tree,
-            keymap: KeyMap::default(),
+            keymap,
             tree_view,
             raw_view: None,
             table_view: None,
@@ -235,15 +235,15 @@ impl App {
 
 pub use diff::run_diff;
 
-/// Run with a file path.
-pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
+/// Run with a file path and keymap.
+pub fn run_file_with(path: &Path, theme: Theme, keymap: KeyMap) -> Result<()> {
     match parser::parse_file_ex(path) {
         Ok(parser::ParseOutcome::Full(document)) => {
-            run_with_document(Arc::new(document), None, theme)
+            run_with_document(Arc::new(document), None, theme, keymap)
         }
         Ok(parser::ParseOutcome::Lazy(lazy)) => {
             let document = Arc::new(lazy.to_document());
-            run_with_document(document, Some(lazy), theme)
+            run_with_document(document, Some(lazy), theme, keymap)
         }
         Err(crate::parser::ParseError::Syntax { line, column, message }) => {
             let content = std::fs::read_to_string(path).unwrap_or_default();
@@ -254,8 +254,8 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
     }
 }
 
-/// Run reading JSON from stdin with progress indicator.
-pub fn run_stdin(theme: Theme) -> Result<()> {
+/// Run reading JSON from stdin with keymap.
+pub fn run_stdin_with(theme: Theme, keymap: KeyMap) -> Result<()> {
     use std::io::{Read, Write};
 
     const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -309,7 +309,7 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
     let source_size = text.len() as u64;
     let document =
         crate::model::node::DocumentBuilder::from_serde_value(value, None, source_size, parse_time);
-    run_with_document(Arc::new(document), None, theme)
+    run_with_document(Arc::new(document), None, theme, keymap)
 }
 
 /// Try parsing input as JSON Lines (one JSON value per line).
@@ -368,8 +368,9 @@ fn run_with_document(
     document: Arc<JsonDocument>,
     lazy: Option<LazyDocument>,
     theme: Theme,
+    keymap: KeyMap,
 ) -> Result<()> {
-    terminal::with_terminal(|t| run_app(t, document, lazy, theme))
+    terminal::with_terminal(|t| run_app(t, document, lazy, theme, keymap))
 }
 
 fn run_app(
@@ -377,8 +378,9 @@ fn run_app(
     document: Arc<JsonDocument>,
     lazy: Option<LazyDocument>,
     theme: Theme,
+    keymap: KeyMap,
 ) -> Result<()> {
-    let mut app = App::new(document, theme);
+    let mut app = App::new(document, theme, keymap);
     if let Some(lazy) = lazy {
         app.set_lazy_document(lazy);
     }

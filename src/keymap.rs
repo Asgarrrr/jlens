@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Semantic actions produced by the keymap layer.
@@ -52,6 +54,25 @@ pub(crate) struct KeyMap {
 }
 
 impl KeyMap {
+    /// Build a keymap from config overrides applied on top of defaults.
+    pub fn from_config(overrides: &HashMap<String, String>) -> Self {
+        let mut keymap = Self::default();
+        for (action_name, key_str) in overrides {
+            let Some(action) = parse_action(action_name) else {
+                eprintln!("\x1b[1;33mwarning\x1b[0m: unknown action '{action_name}' in keybindings");
+                continue;
+            };
+            let Some((mods, code)) = parse_key(key_str) else {
+                eprintln!("\x1b[1;33mwarning\x1b[0m: invalid key '{key_str}' for action '{action_name}'");
+                continue;
+            };
+            // Remove existing bindings for this action, then add the new one.
+            keymap.bindings.retain(|&(_, _, a)| a != action);
+            keymap.bindings.push((mods, code, action));
+        }
+        keymap
+    }
+
     /// Look up the action for a key event. Returns `None` if unmapped.
     pub fn resolve(&self, key: &KeyEvent) -> Option<Action> {
         self.bindings
@@ -114,4 +135,86 @@ impl Default for KeyMap {
 
         Self { bindings }
     }
+}
+
+fn parse_action(name: &str) -> Option<Action> {
+    Some(match name {
+        "move_up" => Action::MoveUp,
+        "move_down" => Action::MoveDown,
+        "page_up" => Action::PageUp,
+        "page_down" => Action::PageDown,
+        "home" => Action::Home,
+        "end" => Action::End,
+        "toggle_expand" => Action::ToggleExpand,
+        "expand_node" => Action::ExpandNode,
+        "collapse_node" => Action::CollapseNode,
+        "expand_all" => Action::ExpandAll,
+        "collapse_all" => Action::CollapseAll,
+        "next_column" => Action::NextColumn,
+        "prev_column" => Action::PrevColumn,
+        "cycle_sort" => Action::CycleSort,
+        "copy_value" => Action::CopyValue,
+        "copy_path" => Action::CopyPath,
+        "quit" => Action::Quit,
+        "search" => Action::StartSearch,
+        "next_search_hit" => Action::NextSearchHit,
+        "prev_search_hit" => Action::PrevSearchHit,
+        "help" => Action::ToggleHelp,
+        "export" => Action::StartExport,
+        "filter" => Action::OpenFilter,
+        "switch_view_1" => Action::SwitchView(1),
+        "switch_view_2" => Action::SwitchView(2),
+        "switch_view_3" => Action::SwitchView(3),
+        "switch_view_4" => Action::SwitchView(4),
+        "switch_view_5" => Action::SwitchView(5),
+        _ => return None,
+    })
+}
+
+fn parse_key(s: &str) -> Option<(KeyModifiers, KeyCode)> {
+    let s = s.trim();
+    let mut mods = KeyModifiers::NONE;
+    let mut remaining = s;
+
+    // Parse modifier prefixes: ctrl+, shift+
+    loop {
+        if let Some(rest) = remaining.strip_prefix("ctrl+") {
+            mods |= KeyModifiers::CONTROL;
+            remaining = rest;
+        } else if let Some(rest) = remaining.strip_prefix("shift+") {
+            mods |= KeyModifiers::SHIFT;
+            remaining = rest;
+        } else {
+            break;
+        }
+    }
+
+    let code = match remaining {
+        "Enter" | "enter" | "Return" => KeyCode::Enter,
+        "Esc" | "esc" | "Escape" => KeyCode::Esc,
+        "Tab" | "tab" => KeyCode::Tab,
+        "BackTab" | "backtab" => KeyCode::BackTab,
+        "Backspace" | "backspace" => KeyCode::Backspace,
+        "Up" | "up" => KeyCode::Up,
+        "Down" | "down" => KeyCode::Down,
+        "Left" | "left" => KeyCode::Left,
+        "Right" | "right" => KeyCode::Right,
+        "Home" | "home" => KeyCode::Home,
+        "End" | "end" => KeyCode::End,
+        "PageUp" | "pageup" => KeyCode::PageUp,
+        "PageDown" | "pagedown" => KeyCode::PageDown,
+        "Space" | "space" | " " => KeyCode::Char(' '),
+        c if c.len() == 1 => {
+            let ch = c.chars().next()?;
+            if ch.is_uppercase() {
+                mods |= KeyModifiers::SHIFT;
+                KeyCode::Char(ch)
+            } else {
+                KeyCode::Char(ch)
+            }
+        }
+        _ => return None,
+    };
+
+    Some((mods, code))
 }
