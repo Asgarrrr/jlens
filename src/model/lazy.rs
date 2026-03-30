@@ -26,14 +26,19 @@ pub struct LazyDocument {
     mmap: Arc<Mmap>,
     /// Byte ranges (start..end in the mmap) for stub nodes whose children
     /// have not been parsed yet.
-    pending: HashMap<NodeId, ByteRange>,
+    pending: HashMap<NodeId, StubKind>,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ByteRange {
-    start: usize,
-    #[allow(dead_code)]
-    end: usize,
+enum StubKind {
+    /// A complete JSON value at bytes[start..end]. Used for depth-limited stubs.
+    Value { start: usize, end: usize },
+    /// Remaining elements inside a parent array, starting at bytes[start].
+    /// Parse comma-separated values until `]`.
+    ArrayContinuation { start: usize },
+    /// Remaining entries inside a parent object, starting at bytes[start].
+    /// Parse key:value pairs until `}`.
+    ObjectContinuation { start: usize },
 }
 
 /// Maximum depth parsed during the initial shallow pass.
@@ -113,7 +118,7 @@ impl LazyDocument {
     /// Any containers found inside the expanded subtree that exceed
     /// `MAX_SHALLOW_DEPTH` relative to the stub are recorded as new stubs.
     pub fn expand_node(&mut self, stub_id: NodeId) -> Result<(), ParseError> {
-        let Some(&range) = self.pending.get(&stub_id) else {
+        let Some(&kind) = self.pending.get(&stub_id) else {
             return Err(ParseError::Syntax {
                 line: 0,
                 column: 0,
@@ -122,8 +127,6 @@ impl LazyDocument {
         };
 
         let stub_depth = self.nodes[stub_id.index()].depth;
-
-        // Remove this stub from pending — it's about to be expanded.
         self.pending.remove(&stub_id);
 
         let bytes = &self.mmap[..];
@@ -136,7 +139,19 @@ impl LazyDocument {
             max_children: MAX_CHILDREN,
         };
 
-        let (_, _end) = sub_builder.parse_value(range.start, None, stub_depth)?;
+        match kind {
+            StubKind::Value { start, .. } => {
+                sub_builder.parse_value(start, None, stub_depth)?;
+            }
+            StubKind::ArrayContinuation { start } => {
+                // Parse remaining array elements: comma-separated values until ']'.
+                sub_builder.parse_continuation_array(start, stub_depth)?;
+            }
+            StubKind::ObjectContinuation { start } => {
+                // Parse remaining object entries: key:value pairs until '}'.
+                sub_builder.parse_continuation_object(start, stub_depth)?;
+            }
+        }
 
         if sub_builder.nodes.is_empty() {
             return Ok(());
@@ -242,7 +257,7 @@ struct ShallowBuilder<'a> {
     bytes: &'a [u8],
     nodes: Vec<JsonNode>,
     max_depth: u16,
-    pending: HashMap<NodeId, ByteRange>,
+    pending: HashMap<NodeId, StubKind>,
     /// Containers deeper than this are stubbed.
     stub_threshold: u16,
     /// Max children to parse per container before stubbing the remainder.
@@ -349,7 +364,7 @@ impl<'a> ShallowBuilder<'a> {
                     value: JsonValue::Object(Vec::new()),
                     depth: depth.saturating_add(1),
                 });
-                self.pending.insert(stub_id, ByteRange { start: i, end: 0 });
+                self.pending.insert(stub_id, StubKind::ObjectContinuation { start: i });
                 entries.push((Arc::from("..."), stub_id));
                 self.nodes[id.index()].value = JsonValue::Object(entries);
                 return Ok((id, self.bytes.len()));
@@ -423,11 +438,8 @@ impl<'a> ShallowBuilder<'a> {
                 });
                 // Store start of remaining items. end=0 means "parse until
                 // closing bracket" at expansion time.
-                self.pending.insert(stub_id, ByteRange { start: i, end: 0 });
+                self.pending.insert(stub_id, StubKind::ArrayContinuation { start: i });
                 children.push(stub_id);
-                // We can't cheaply find the closing ']' without scanning.
-                // Return bytes.len() — the caller (from_mmap or parse_value at
-                // the root level) will accept this as "consumed to end".
                 self.nodes[id.index()].value = JsonValue::Array(children);
                 return Ok((id, self.bytes.len()));
             }
@@ -473,8 +485,112 @@ impl<'a> ShallowBuilder<'a> {
             depth,
         });
 
-        self.pending.insert(id, ByteRange { start: offset, end });
+        self.pending.insert(id, StubKind::Value { start: offset, end });
         Ok((id, end))
+    }
+
+    /// Parse remaining array elements starting at `offset` (mid-array, after a comma).
+    /// Creates a synthetic root array containing the parsed elements.
+    fn parse_continuation_array(
+        &mut self,
+        offset: usize,
+        depth: u16,
+    ) -> Result<(), ParseError> {
+        let root_id = self.allocate(JsonNode {
+            parent: None,
+            value: JsonValue::Array(Vec::new()),
+            depth,
+        });
+
+        let mut i = scan::skip_whitespace(self.bytes, offset);
+        // Skip leading comma if present (left over from the parent's last parsed element).
+        if i < self.bytes.len() && self.bytes[i] == b',' {
+            i = scan::skip_whitespace(self.bytes, i + 1);
+        }
+
+        let mut children: Vec<NodeId> = Vec::new();
+        let child_depth = depth.saturating_add(1);
+
+        while i < self.bytes.len() && self.bytes[i] != b']' {
+            if children.len() >= self.max_children {
+                let stub_id = self.allocate(JsonNode {
+                    parent: Some(root_id),
+                    value: JsonValue::Array(Vec::new()),
+                    depth: child_depth,
+                });
+                self.pending.insert(stub_id, StubKind::ArrayContinuation { start: i });
+                children.push(stub_id);
+                break;
+            }
+
+            let (child_id, after_value) =
+                self.parse_value(i, Some(root_id), child_depth)?;
+            children.push(child_id);
+
+            i = scan::skip_whitespace(self.bytes, after_value);
+            if i < self.bytes.len() && self.bytes[i] == b',' {
+                i = scan::skip_whitespace(self.bytes, i + 1);
+            }
+        }
+
+        self.nodes[root_id.index()].value = JsonValue::Array(children);
+        Ok(())
+    }
+
+    /// Parse remaining object entries starting at `offset` (mid-object, after a comma).
+    fn parse_continuation_object(
+        &mut self,
+        offset: usize,
+        depth: u16,
+    ) -> Result<(), ParseError> {
+        let root_id = self.allocate(JsonNode {
+            parent: None,
+            value: JsonValue::Object(Vec::new()),
+            depth,
+        });
+
+        let mut i = scan::skip_whitespace(self.bytes, offset);
+        if i < self.bytes.len() && self.bytes[i] == b',' {
+            i = scan::skip_whitespace(self.bytes, i + 1);
+        }
+
+        let mut entries: Vec<(Arc<str>, NodeId)> = Vec::new();
+        let child_depth = depth.saturating_add(1);
+
+        while i < self.bytes.len() && self.bytes[i] != b'}' {
+            if entries.len() >= self.max_children {
+                let stub_id = self.allocate(JsonNode {
+                    parent: Some(root_id),
+                    value: JsonValue::Object(Vec::new()),
+                    depth: child_depth,
+                });
+                self.pending.insert(stub_id, StubKind::ObjectContinuation { start: i });
+                entries.push((Arc::from("..."), stub_id));
+                break;
+            }
+
+            let (key, after_key) = scan::extract_key(self.bytes, i)?;
+            let colon = scan::skip_whitespace(self.bytes, after_key);
+            if colon >= self.bytes.len() || self.bytes[colon] != b':' {
+                return Err(ParseError::Syntax {
+                    line: 0,
+                    column: colon,
+                    message: "expected ':' after object key".to_string(),
+                });
+            }
+
+            let (child_id, after_value) =
+                self.parse_value(colon + 1, Some(root_id), child_depth)?;
+            entries.push((Arc::from(key.as_str()), child_id));
+
+            i = scan::skip_whitespace(self.bytes, after_value);
+            if i < self.bytes.len() && self.bytes[i] == b',' {
+                i = scan::skip_whitespace(self.bytes, i + 1);
+            }
+        }
+
+        self.nodes[root_id.index()].value = JsonValue::Object(entries);
+        Ok(())
     }
 }
 
@@ -659,5 +775,59 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn continuation_stub_expands_correctly() {
+        // Create a JSON array larger than MAX_CHILDREN (1000).
+        let mut items = Vec::new();
+        for i in 0..2005 {
+            items.push(format!("{}", i));
+        }
+        let json = format!("[{}]", items.join(","));
+        let mmap = make_mmap(json.as_bytes());
+        let mut lazy =
+            LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+
+        // 1000 parsed + 1 continuation stub.
+        let doc = lazy.to_document();
+        let root = doc.node(doc.root());
+        if let JsonValue::Array(children) = &root.value {
+            assert_eq!(children.len(), 1001);
+        } else {
+            panic!("expected root array");
+        }
+
+        // Find and expand the continuation stub.
+        let stubs: Vec<NodeId> = lazy.stub_ids().collect();
+        assert_eq!(stubs.len(), 1);
+        let stub_id = stubs[0];
+        lazy.expand_node(stub_id).unwrap();
+
+        // The stub now contains 1000 more elements + 1 new continuation stub
+        // for the remaining 5 elements. Progressive expansion.
+        let doc = lazy.to_document();
+        let stub_node = doc.node(stub_id);
+        if let JsonValue::Array(expanded) = &stub_node.value {
+            assert_eq!(expanded.len(), 1001); // 1000 + 1 continuation
+        } else {
+            panic!("expected array in expanded continuation stub");
+        }
+
+        // Expand the second continuation stub to get the final 5 items.
+        let stubs2: Vec<NodeId> = lazy.stub_ids().collect();
+        assert_eq!(stubs2.len(), 1);
+        lazy.expand_node(stubs2[0]).unwrap();
+
+        let doc = lazy.to_document();
+        let stub2_node = doc.node(stubs2[0]);
+        if let JsonValue::Array(final_items) = &stub2_node.value {
+            assert_eq!(final_items.len(), 5); // the last 5
+        } else {
+            panic!("expected array in final continuation stub");
+        }
+
+        // No more stubs — fully expanded.
+        assert!(lazy.stub_ids().next().is_none());
     }
 }
