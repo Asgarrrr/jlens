@@ -104,7 +104,6 @@ fn main() -> Result<()> {
         let outcome = parser::parse_file_ex(path)?;
         let parse_ms = start.elapsed().as_millis();
         let (nodes, strategy) = match outcome {
-            parser::ParseOutcome::Full(doc) => (doc.metadata().total_nodes, "full"),
             parser::ParseOutcome::Lazy(lazy) => {
                 let doc = lazy.to_document();
                 (doc.metadata().total_nodes, "lazy")

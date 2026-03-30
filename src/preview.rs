@@ -1,7 +1,7 @@
 use ratatui::layout::Rect;
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Sparkline, Widget};
+use ratatui::widgets::Sparkline;
 use ratatui::Frame;
 
 use crate::model::node::{JsonDocument, JsonValue, NodeId};
@@ -36,7 +36,6 @@ pub(crate) enum PreviewContent {
         value: String,
         type_name: &'static str,
     },
-    Empty,
 }
 
 pub(crate) enum StringKind {
@@ -409,15 +408,5 @@ pub(crate) fn render(
             );
         }
 
-        PreviewContent::Empty => {
-            frame.render_widget(
-                ratatui::widgets::Paragraph::new(Line::from(Span::styled(
-                    " No preview",
-                    theme.fg_dim_style,
-                )))
-                .style(theme.bg_style),
-                area,
-            );
-        }
     }
 }

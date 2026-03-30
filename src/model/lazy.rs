@@ -31,8 +31,8 @@ pub struct LazyDocument {
 
 #[derive(Debug, Clone, Copy)]
 enum StubKind {
-    /// A complete JSON value at bytes[start..end]. Used for depth-limited stubs.
-    Value { start: usize, end: usize },
+    /// A complete JSON value at bytes[start..]. Used for depth-limited stubs.
+    Value { start: usize },
     /// Remaining elements inside a parent array, starting at bytes[start].
     /// Parse comma-separated values until `]`.
     ArrayContinuation { start: usize },
@@ -485,7 +485,7 @@ impl<'a> ShallowBuilder<'a> {
             depth,
         });
 
-        self.pending.insert(id, StubKind::Value { start: offset, end });
+        self.pending.insert(id, StubKind::Value { start: offset });
         Ok((id, end))
     }
 

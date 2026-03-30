@@ -59,8 +59,6 @@ pub struct Theme {
 
     // Semantic
     pub error_style: Style,
-    pub warning_style: Style,
-    pub success_style: Style,
 
     // Selection
     pub selected_indicator_style: Style,
@@ -148,8 +146,6 @@ impl Theme {
             diff_modified_bg: Style::new().bg(Color::Rgb(42, 38, 22)),
 
             error_style: Style::new().fg(Color::Rgb(243, 139, 168)),
-            warning_style: Style::new().fg(Color::Rgb(249, 226, 175)),
-            success_style: Style::new().fg(Color::Rgb(166, 227, 161)),
 
             selected_indicator_style: Style::new().fg(toolbar_active_bg),
             alt_row_bg: Style::new().bg(Color::Rgb(26, 26, 36)),
@@ -233,8 +229,6 @@ impl Theme {
             diff_modified_bg: Style::new().bg(Color::Rgb(248, 238, 212)),
 
             error_style: Style::new().fg(Color::Rgb(210, 15, 57)),
-            warning_style: Style::new().fg(Color::Rgb(223, 142, 29)),
-            success_style: Style::new().fg(Color::Rgb(64, 160, 43)),
 
             selected_indicator_style: Style::new().fg(toolbar_active_bg),
             alt_row_bg: Style::new().bg(Color::Rgb(230, 233, 239)),

@@ -292,9 +292,6 @@ pub struct Options {
 
 pub fn run_file_with(path: &Path, opts: Options) -> Result<()> {
     match parser::parse_file_ex(path) {
-        Ok(parser::ParseOutcome::Full(document)) => {
-            run_with_document(Arc::new(document), None, opts)
-        }
         Ok(parser::ParseOutcome::Lazy(lazy)) => {
             let document = Arc::new(lazy.to_document());
             run_with_document(document, Some(lazy), opts)

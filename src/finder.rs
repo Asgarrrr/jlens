@@ -1,9 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, Widget};
+use ratatui::widgets::{Block, Clear};
 use ratatui::Frame;
 
 use crate::model::node::{JsonDocument, JsonValue, NodeId};

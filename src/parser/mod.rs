@@ -1,6 +1,4 @@
 pub mod detect;
-pub mod full;
-pub mod mmap;
 pub mod scan;
 pub mod streaming;
 
@@ -45,22 +43,19 @@ impl From<simd_json::Error> for ParseError {
     }
 }
 
-/// Result of parsing: either a fully-parsed document, or a lazily-parsed one
-/// with stubs that can be expanded on demand.
+/// Result of parsing — always lazy with progressive expansion.
 pub enum ParseOutcome {
-    Full(JsonDocument),
     Lazy(LazyDocument),
 }
 
-/// Parse a JSON file from the given path, auto-detecting the best strategy.
+/// Parse a JSON file, returning a fully-materialized document.
 pub fn parse_file(path: &Path) -> Result<JsonDocument, ParseError> {
     match parse_file_ex(path)? {
-        ParseOutcome::Full(doc) => Ok(doc),
         ParseOutcome::Lazy(lazy) => Ok(lazy.into_document()),
     }
 }
 
-/// Like [`parse_file`] but preserves lazy-loading capabilities for large files.
+/// Parse a JSON file, preserving lazy-loading capabilities.
 pub fn parse_file_ex(path: &Path) -> Result<ParseOutcome, ParseError> {
     detect::parse_ex(path)
 }
