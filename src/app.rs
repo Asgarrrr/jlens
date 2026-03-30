@@ -674,12 +674,10 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             | FilterAction::ReopenInput
             | FilterAction::DelegateToResult(_) => {}
         }
-        // Update autocomplete suggestions + live preview
+        // Update suggestions (always, so Tab shows them instantly) + live preview
         if app.filter.active {
-            if app.filter.show_suggestions {
-                let root = app.effective_root();
-                filter::update_suggestions(&mut app.filter, &app.document, root);
-            }
+            let root = app.effective_root();
+            filter::update_suggestions(&mut app.filter, &app.document, root);
             filter::update_live_preview(&mut app.filter, &app.document);
         }
         return;

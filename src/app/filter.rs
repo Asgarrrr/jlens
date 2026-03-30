@@ -95,10 +95,27 @@ impl FilterState {
                 }
             }
             (KeyModifiers::NONE, KeyCode::Tab) => {
-                if self.show_suggestions && !self.suggestions.is_empty() {
-                    self.accept_suggestion();
+                if !self.suggestions.is_empty() {
+                    if self.show_suggestions {
+                        // Cycle to next suggestion
+                        self.suggestion_idx = (self.suggestion_idx + 1) % self.suggestions.len();
+                    } else {
+                        self.show_suggestions = true;
+                        self.suggestion_idx = 0;
+                    }
                 } else {
                     self.show_suggestions = true;
+                }
+                FilterAction::None
+            }
+            (KeyModifiers::SHIFT, KeyCode::BackTab) if self.show_suggestions => {
+                // Reverse cycle
+                if !self.suggestions.is_empty() {
+                    self.suggestion_idx = if self.suggestion_idx == 0 {
+                        self.suggestions.len() - 1
+                    } else {
+                        self.suggestion_idx - 1
+                    };
                 }
                 FilterAction::None
             }
@@ -115,7 +132,7 @@ impl FilterState {
             (KeyModifiers::NONE, KeyCode::Backspace) => {
                 self.query.pop();
                 self.error = None;
-                self.show_suggestions = !self.query.is_empty();
+                self.show_suggestions = false;
                 FilterAction::None
             }
             (mods, KeyCode::Char(c))
@@ -124,7 +141,7 @@ impl FilterState {
                 if self.query.len() < 1024 {
                     self.query.push(c);
                     self.error = None;
-                    self.show_suggestions = true;
+                    self.show_suggestions = false;
                 }
                 FilterAction::None
             }
