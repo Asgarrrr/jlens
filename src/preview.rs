@@ -268,24 +268,33 @@ pub(crate) fn render(
     area: Rect,
     theme: &Theme,
 ) {
-    if area.height < 2 {
+    if area.height < 3 {
         return;
     }
 
-    // Separator line at top
-    let [sep_area, content_area] = ratatui::layout::Layout::vertical([
-        ratatui::layout::Constraint::Length(1),
-        ratatui::layout::Constraint::Min(1),
-    ])
-    .areas(area);
+    // Preview pane with titled border
+    let title = match content {
+        PreviewContent::Sparkline { count, .. } => format!(" Sparkline \u{2502} {count} values "),
+        PreviewContent::Table { total, .. } => format!(" Table \u{2502} {total} rows "),
+        PreviewContent::StringList { total, .. } => format!(" Strings \u{2502} {total} items "),
+        PreviewContent::KeySummary { entries } => format!(" Object \u{2502} {} keys ", entries.len()),
+        PreviewContent::FormattedString { kind, .. } => match kind {
+            StringKind::Url => " URL ".into(),
+            StringKind::IsoDate => " Date ".into(),
+            StringKind::Json => " Embedded JSON ".into(),
+            StringKind::Plain => " String ".into(),
+        },
+        PreviewContent::Scalar { type_name, .. } => format!(" {type_name} "),
+    };
 
-    let sep = Line::from(Span::styled(
-        "\u{2500}".repeat(sep_area.width as usize),
-        theme.tree_guide_style,
-    ));
-    frame.render_widget(ratatui::widgets::Paragraph::new(sep), sep_area);
-
-    let area = content_area;
+    let block = ratatui::widgets::Block::bordered()
+        .title(title)
+        .title_style(theme.help_title_style)
+        .border_style(theme.tree_guide_style)
+        .style(theme.bg_style);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let area = inner;
 
     match content {
         PreviewContent::Sparkline {
@@ -293,12 +302,11 @@ pub(crate) fn render(
             min,
             max,
             avg,
-            count,
+            ..
         } => {
-            // Stats line at top, sparkline below
             let stats = format!(
-                " Sparkline \u{2502} count: {}  min: {:.2}  max: {:.2}  avg: {:.2}",
-                count, min, max, avg
+                " min: {:.2}  max: {:.2}  avg: {:.2}",
+                min, max, avg
             );
             let stats_line = Line::from(Span::styled(stats, theme.fg_dim_style));
 
@@ -332,10 +340,10 @@ pub(crate) fn render(
         PreviewContent::Table {
             headers,
             rows,
-            total,
+            ..
         } => {
             let mut lines = Vec::new();
-            let header_str = format!(" Table ({} rows) \u{2502} {}", total, headers.join(" \u{2502} "));
+            let header_str = format!(" {}", headers.join(" \u{2502} "));
             lines.push(Line::from(Span::styled(
                 header_str,
                 theme.fg_bold_style.add_modifier(Modifier::UNDERLINED),
@@ -352,12 +360,8 @@ pub(crate) fn render(
             );
         }
 
-        PreviewContent::StringList { items, total } => {
+        PreviewContent::StringList { items, .. } => {
             let mut lines = Vec::new();
-            lines.push(Line::from(Span::styled(
-                format!(" Strings ({} items)", total),
-                theme.fg_dim_style,
-            )));
             for (i, item) in items.iter().enumerate() {
                 let truncated = if item.len() > 80 { crate::util::truncate_chars(item, 77) } else { item };
                 lines.push(Line::from(vec![
@@ -373,10 +377,6 @@ pub(crate) fn render(
 
         PreviewContent::KeySummary { entries } => {
             let mut lines = Vec::new();
-            lines.push(Line::from(Span::styled(
-                format!(" Object \u{2502} {} keys", entries.len()),
-                theme.fg_dim_style,
-            )));
             for (key, type_name, preview) in entries {
                 let value_style = match *type_name {
                     "string" => theme.string,
@@ -397,15 +397,9 @@ pub(crate) fn render(
             );
         }
 
-        PreviewContent::FormattedString { text, kind } => {
-            let label = match kind {
-                StringKind::Url => " URL",
-                StringKind::IsoDate => " Date",
-                StringKind::Json => " Embedded JSON",
-                StringKind::Plain => " String",
-            };
+        PreviewContent::FormattedString { text, .. } => {
             let mut lines = vec![Line::from(Span::styled(
-                format!("{} ({} chars)", label, text.len()),
+                format!(" {} chars", text.len()),
                 theme.fg_dim_style,
             ))];
 

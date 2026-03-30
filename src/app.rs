@@ -469,19 +469,45 @@ fn run_app(
                     (content_area, None)
                 };
 
-                app.last_main_area = main_area;
                 app.last_status_area = status;
-                app.update_viewport_height(main_area.height as usize);
 
                 ui::render_toolbar(frame, toolbar, app.active_mode, &app.theme);
 
-                // If a filter result is showing, render it instead of the normal view.
+                // Main view: bordered block with view name as title
+                let view_title = if app.filter.showing_result {
+                    " Filter Result "
+                } else {
+                    match app.active_mode {
+                        ViewMode::Tree => " Tree ",
+                        ViewMode::Table => " Table ",
+                        ViewMode::Raw => " Raw ",
+                        ViewMode::Paths => " Paths ",
+                        ViewMode::Stats => " Stats ",
+                    }
+                };
+                let zoom_indicator = if !app.zoom_stack.is_empty() {
+                    let path = app.document.path_of(*app.zoom_stack.last().unwrap());
+                    format!(" \u{2502} zoom: {path} ")
+                } else {
+                    String::new()
+                };
+                let block = ratatui::widgets::Block::bordered()
+                    .title(format!("{view_title}{zoom_indicator}"))
+                    .title_style(app.theme.help_title_style)
+                    .border_style(app.theme.tree_guide_style)
+                    .style(app.theme.bg_style);
+                let inner = block.inner(main_area);
+                frame.render_widget(block, main_area);
+
+                app.last_main_area = inner;
+                app.update_viewport_height(inner.height as usize);
+
                 if app.filter.showing_result {
                     if let Some(ref result_view) = app.filter.result_view {
-                        result_view.render(frame, main_area, &app.theme);
+                        result_view.render(frame, inner, &app.theme);
                     }
                 } else {
-                    app.active_view().render(frame, main_area, &app.theme);
+                    app.active_view().render(frame, inner, &app.theme);
                 }
 
                 // Bottom bar: filter input > search > export (mutually exclusive)
