@@ -219,7 +219,7 @@ impl Widget for FilterBar<'_> {
         let filter = self.state;
         let theme = self.theme;
 
-        let mut spans = vec![Span::styled(" : ", theme.toolbar_brand_style)];
+        let mut spans = vec![Span::styled(" \u{276f} ", theme.toolbar_brand_style)];
 
         spans.push(Span::styled(filter.query.as_str(), theme.fg_style));
         spans.push(Span::styled("\u{2588}", theme.input_cursor_style));

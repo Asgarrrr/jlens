@@ -62,15 +62,6 @@ impl ViewMode {
         }
     }
 
-    pub(crate) fn shortcut(self) -> char {
-        match self {
-            ViewMode::Tree => '1',
-            ViewMode::Table => '2',
-            ViewMode::Raw => '3',
-            ViewMode::Paths => '4',
-            ViewMode::Stats => '5',
-        }
-    }
 }
 
 /// Trait implemented by all visualization modes.

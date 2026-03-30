@@ -23,21 +23,21 @@ pub fn render_toolbar(frame: &mut Frame, area: Rect, active_mode: ViewMode, them
     let mut spans: Vec<Span> = Vec::new();
 
     spans.push(Span::styled(" jlens ", theme.toolbar_brand_style));
+    spans.push(Span::styled("  ", theme.toolbar_bg_style));
 
-    spans.push(Span::styled(" ", theme.toolbar_bg_style));
-
-    let modes: &[ViewMode] = &ViewMode::ALL;
-    for (i, &mode) in modes.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(" │ ", theme.tree_guide_style));
-        }
+    for &mode in &ViewMode::ALL {
         let is_active = mode == active_mode;
-        let label = format!(" {}: {} ", mode.shortcut(), mode.label());
-
         if is_active {
-            spans.push(Span::styled(label, theme.toolbar_active_style));
+            spans.push(Span::styled(" \u{25cf} ", theme.toolbar_active_style));
+            spans.push(Span::styled(
+                format!("{} ", mode.label()),
+                theme.toolbar_active_style,
+            ));
         } else {
-            spans.push(Span::styled(label, theme.toolbar_inactive_style));
+            spans.push(Span::styled(
+                format!("  {} ", mode.label()),
+                theme.fg_dim_style,
+            ));
         }
     }
 
