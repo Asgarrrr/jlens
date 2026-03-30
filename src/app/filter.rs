@@ -14,6 +14,7 @@ use crate::views::tree::TreeView;
 pub(crate) struct FilterState {
     pub(crate) active: bool,
     pub(crate) query: String,
+    pub(crate) cursor: usize, // byte offset in query
     pub(crate) error: Option<String>,
     pub(crate) showing_result: bool,
     pub(crate) result_view: Option<TreeView>,
@@ -21,10 +22,13 @@ pub(crate) struct FilterState {
     pub(crate) suggestions: Vec<String>,
     pub(crate) suggestion_idx: usize,
     pub(crate) show_suggestions: bool,
-    /// Live preview of filter results (updated as user types, debounced).
     pub(crate) live_results: Vec<String>,
     pub(crate) live_count: usize,
     pub(crate) live_error: Option<String>,
+    /// Filter expression history (persists across open/close).
+    pub(crate) history: Vec<String>,
+    history_idx: Option<usize>,
+    history_draft: String,
 }
 
 pub(crate) enum FilterAction {
@@ -41,6 +45,7 @@ impl FilterState {
         Self {
             active: false,
             query: String::new(),
+            cursor: 0,
             error: None,
             showing_result: false,
             result_view: None,
@@ -51,28 +56,36 @@ impl FilterState {
             live_results: Vec::new(),
             live_count: 0,
             live_error: None,
+            history: Vec::new(),
+            history_idx: None,
+            history_draft: String::new(),
         }
     }
 
     pub(crate) fn open(&mut self) {
         self.active = true;
         self.query.clear();
+        self.cursor = 0;
         self.error = None;
         self.suggestions.clear();
         self.show_suggestions = false;
         self.live_results.clear();
         self.live_count = 0;
         self.live_error = None;
+        self.history_idx = None;
+        self.history_draft.clear();
     }
 
-    /// Reopen the filter input preserving the existing query.
+    /// Reopen preserving the existing query.
     pub(crate) fn reopen(&mut self) {
         self.active = true;
+        self.cursor = self.query.len();
         self.error = None;
         self.show_suggestions = false;
         self.live_results.clear();
         self.live_count = 0;
         self.live_error = None;
+        self.history_idx = None;
     }
 
     pub(crate) fn close_input(&mut self) {
@@ -88,6 +101,7 @@ impl FilterState {
 
     pub(crate) fn handle_input_key(&mut self, key: KeyEvent) -> FilterAction {
         match (key.modifiers, key.code) {
+            // --- Modal controls ---
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 if self.show_suggestions {
                     self.show_suggestions = false;
@@ -101,9 +115,17 @@ impl FilterState {
                     self.accept_suggestion();
                     FilterAction::None
                 } else {
+                    // Save to history before running
+                    let q = self.query.trim().to_string();
+                    if !q.is_empty() {
+                        self.history.retain(|h| h != &q);
+                        self.history.push(q);
+                    }
                     FilterAction::RunFilter
                 }
             }
+
+            // --- Suggestions ---
             (KeyModifiers::NONE, KeyCode::Tab) => {
                 if !self.suggestions.is_empty() {
                     if self.show_suggestions {
@@ -113,11 +135,9 @@ impl FilterState {
                         self.suggestion_idx = 0;
                     }
                 }
-                // No-op if suggestions empty — don't enter suggestion mode
                 FilterAction::None
             }
             (KeyModifiers::SHIFT, KeyCode::BackTab) if self.show_suggestions => {
-                // Reverse cycle
                 if !self.suggestions.is_empty() {
                     self.suggestion_idx = if self.suggestion_idx == 0 {
                         self.suggestions.len() - 1
@@ -137,8 +157,105 @@ impl FilterState {
                 self.suggestion_idx = self.suggestion_idx.saturating_sub(1);
                 FilterAction::None
             }
+
+            // --- History ---
+            (KeyModifiers::NONE, KeyCode::Up) if !self.show_suggestions => {
+                if !self.history.is_empty() {
+                    match self.history_idx {
+                        None => {
+                            self.history_draft = self.query.clone();
+                            self.history_idx = Some(self.history.len() - 1);
+                        }
+                        Some(idx) if idx > 0 => {
+                            self.history_idx = Some(idx - 1);
+                        }
+                        _ => {}
+                    }
+                    if let Some(idx) = self.history_idx {
+                        self.query = self.history[idx].clone();
+                        self.cursor = self.query.len();
+                    }
+                }
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::Down) if !self.show_suggestions => {
+                if let Some(idx) = self.history_idx {
+                    if idx + 1 < self.history.len() {
+                        self.history_idx = Some(idx + 1);
+                        self.query = self.history[idx + 1].clone();
+                    } else {
+                        self.history_idx = None;
+                        self.query = self.history_draft.clone();
+                    }
+                    self.cursor = self.query.len();
+                }
+                FilterAction::None
+            }
+
+            // --- Cursor movement ---
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                if self.cursor > 0 {
+                    // Move back one char
+                    let prev = self.query[..self.cursor]
+                        .char_indices()
+                        .next_back()
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    self.cursor = prev;
+                }
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                if self.cursor < self.query.len() {
+                    let next = self.query[self.cursor..]
+                        .char_indices()
+                        .nth(1)
+                        .map(|(i, _)| self.cursor + i)
+                        .unwrap_or(self.query.len());
+                    self.cursor = next;
+                }
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::Home) | (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
+                self.cursor = 0;
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::CONTROL, KeyCode::Char('e')) => {
+                self.cursor = self.query.len();
+                FilterAction::None
+            }
+
+            // --- Editing ---
             (KeyModifiers::NONE, KeyCode::Backspace) => {
-                self.query.pop();
+                if self.cursor > 0 {
+                    let prev = self.query[..self.cursor]
+                        .char_indices()
+                        .next_back()
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    self.query.drain(prev..self.cursor);
+                    self.cursor = prev;
+                }
+                self.error = None;
+                self.show_suggestions = false;
+                FilterAction::None
+            }
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                if self.cursor < self.query.len() {
+                    let next = self.query[self.cursor..]
+                        .char_indices()
+                        .nth(1)
+                        .map(|(i, _)| self.cursor + i)
+                        .unwrap_or(self.query.len());
+                    self.query.drain(self.cursor..next);
+                }
+                self.error = None;
+                FilterAction::None
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+                // Clear line before cursor
+                self.query.drain(..self.cursor);
+                self.cursor = 0;
                 self.error = None;
                 self.show_suggestions = false;
                 FilterAction::None
@@ -147,7 +264,8 @@ impl FilterState {
                 if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
                 if self.query.len() < 1024 {
-                    self.query.push(c);
+                    self.query.insert(self.cursor, c);
+                    self.cursor += c.len_utf8();
                     self.error = None;
                     self.show_suggestions = false;
                 }
@@ -161,10 +279,10 @@ impl FilterState {
         let Some(suggestion) = self.suggestions.get(self.suggestion_idx).cloned() else {
             return;
         };
-        // Find the partial token being typed to replace it
-        let prefix = completion_prefix(&self.query);
-        self.query.truncate(self.query.len() - prefix.len());
-        self.query.push_str(&suggestion);
+        let prefix = completion_prefix(&self.query[..self.cursor]);
+        let prefix_start = self.cursor - prefix.len();
+        self.query.replace_range(prefix_start..self.cursor, &suggestion);
+        self.cursor = prefix_start + suggestion.len();
         self.show_suggestions = false;
         self.suggestion_idx = 0;
     }
@@ -268,12 +386,14 @@ pub(crate) fn render_filter_overlay(
         return;
     }
 
-    // Input line
+    // Input line with cursor at correct position
     let input_area = Rect::new(inner.x, inner.y, inner.width, 1);
+    let (before_cursor, after_cursor) = filter.query.split_at(filter.cursor);
     let mut input_spans = vec![
         Span::styled(" \u{276f} ", theme.toolbar_brand_style),
-        Span::styled(filter.query.as_str(), theme.fg_style),
+        Span::styled(before_cursor, theme.fg_style),
         Span::styled("\u{2588}", theme.input_cursor_style),
+        Span::styled(after_cursor, theme.fg_style),
     ];
 
     if filter.show_suggestions {
