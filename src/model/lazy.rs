@@ -36,9 +36,10 @@ struct ByteRange {
     end: usize,
 }
 
-/// Maximum depth parsed during the initial shallow pass. Containers deeper
-/// than this are stored as stubs.
+/// Maximum depth parsed during the initial shallow pass.
 const MAX_SHALLOW_DEPTH: u16 = 1;
+/// Maximum children parsed per container before stubbing the rest.
+const MAX_CHILDREN: usize = 1000;
 
 impl LazyDocument {
     /// Create a `LazyDocument` by doing a shallow parse of the mmap data.
@@ -62,6 +63,7 @@ impl LazyDocument {
                 max_depth: 0,
                 pending: HashMap::new(),
                 stub_threshold: MAX_SHALLOW_DEPTH,
+                max_children: MAX_CHILDREN,
             };
 
             let root = builder.parse_value(0, None, 0)?;
@@ -131,6 +133,7 @@ impl LazyDocument {
             max_depth: 0,
             pending: HashMap::new(),
             stub_threshold: stub_depth + MAX_SHALLOW_DEPTH + 1,
+            max_children: MAX_CHILDREN,
         };
 
         let (_, _end) = sub_builder.parse_value(range.start, None, stub_depth)?;
@@ -240,10 +243,10 @@ struct ShallowBuilder<'a> {
     nodes: Vec<JsonNode>,
     max_depth: u16,
     pending: HashMap<NodeId, ByteRange>,
-    /// Containers deeper than this are stubbed. For the initial parse this
-    /// equals `MAX_SHALLOW_DEPTH`; for expansion it is relative to the
-    /// stub being expanded.
+    /// Containers deeper than this are stubbed.
     stub_threshold: u16,
+    /// Max children to parse per container before stubbing the remainder.
+    max_children: usize,
 }
 
 impl<'a> ShallowBuilder<'a> {
@@ -339,10 +342,21 @@ impl<'a> ShallowBuilder<'a> {
         let mut entries: Vec<(Arc<str>, NodeId)> = Vec::new();
 
         while i < self.bytes.len() && self.bytes[i] != b'}' {
-            // Expect a key string.
+            // Hit child limit — stub the remainder.
+            if entries.len() >= self.max_children {
+                let stub_id = self.allocate(JsonNode {
+                    parent: Some(id),
+                    value: JsonValue::Object(Vec::new()),
+                    depth: depth.saturating_add(1),
+                });
+                self.pending.insert(stub_id, ByteRange { start: i, end: 0 });
+                entries.push((Arc::from("..."), stub_id));
+                self.nodes[id.index()].value = JsonValue::Object(entries);
+                return Ok((id, self.bytes.len()));
+            }
+
             let (key, after_key) = scan::extract_key(self.bytes, i)?;
 
-            // Expect ':' separator.
             let colon = scan::skip_whitespace(self.bytes, after_key);
             if colon >= self.bytes.len() || self.bytes[colon] != b':' {
                 return Err(ParseError::Syntax {
@@ -352,19 +366,16 @@ impl<'a> ShallowBuilder<'a> {
                 });
             }
 
-            // Parse the value.
             let (child_id, after_value) =
                 self.parse_value(colon + 1, Some(id), depth.saturating_add(1))?;
             entries.push((Arc::from(key.as_str()), child_id));
 
-            // Skip optional comma.
             i = scan::skip_whitespace(self.bytes, after_value);
             if i < self.bytes.len() && self.bytes[i] == b',' {
                 i = scan::skip_whitespace(self.bytes, i + 1);
             }
         }
 
-        // Skip closing '}'.
         if i < self.bytes.len() && self.bytes[i] == b'}' {
             i += 1;
         }
@@ -401,7 +412,28 @@ impl<'a> ShallowBuilder<'a> {
         let mut children: Vec<NodeId> = Vec::new();
 
         while i < self.bytes.len() && self.bytes[i] != b']' {
-            let (child_id, after_value) = self.parse_value(i, Some(id), depth.saturating_add(1))?;
+            // Hit child limit — stub the remainder without scanning ahead.
+            // Store start offset; end is resolved during expansion by parsing
+            // remaining elements until the closing bracket.
+            if children.len() >= self.max_children {
+                let stub_id = self.allocate(JsonNode {
+                    parent: Some(id),
+                    value: JsonValue::Array(Vec::new()),
+                    depth: depth.saturating_add(1),
+                });
+                // Store start of remaining items. end=0 means "parse until
+                // closing bracket" at expansion time.
+                self.pending.insert(stub_id, ByteRange { start: i, end: 0 });
+                children.push(stub_id);
+                // We can't cheaply find the closing ']' without scanning.
+                // Return bytes.len() — the caller (from_mmap or parse_value at
+                // the root level) will accept this as "consumed to end".
+                self.nodes[id.index()].value = JsonValue::Array(children);
+                return Ok((id, self.bytes.len()));
+            }
+
+            let (child_id, after_value) =
+                self.parse_value(i, Some(id), depth.saturating_add(1))?;
             children.push(child_id);
 
             i = scan::skip_whitespace(self.bytes, after_value);
