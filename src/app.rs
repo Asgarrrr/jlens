@@ -245,31 +245,9 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
             let document = Arc::new(lazy.to_document());
             run_with_document(document, Some(lazy), theme)
         }
-        Err(crate::parser::ParseError::Syntax {
-            line,
-            column,
-            message,
-        }) => {
-            eprintln!(
-                "\x1b[1;31merror\x1b[0m: invalid JSON in \x1b[1m{}\x1b[0m",
-                path.display()
-            );
-            eprintln!("  --> line {}, column {}", line, column);
-            eprintln!("  {}", message);
-
-            // Try to show the offending line from the file
-            if let Ok(content) = std::fs::read_to_string(path)
-                && let Some(error_line) = content.lines().nth(line.saturating_sub(1))
-            {
-                eprintln!();
-                eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", line, error_line);
-                if column > 0 {
-                    eprintln!(
-                        "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
-                        " ".repeat(column.saturating_sub(1))
-                    );
-                }
-            }
+        Err(crate::parser::ParseError::Syntax { line, column, message }) => {
+            let content = std::fs::read_to_string(path).unwrap_or_default();
+            print_json_error(&path.display().to_string(), &content, line, column, &message);
             std::process::exit(1);
         }
         Err(e) => Err(e).with_context(|| format!("Failed to open {}", path.display())),
@@ -278,12 +256,17 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
 
 /// Run reading JSON from stdin with progress indicator.
 pub fn run_stdin(theme: Theme) -> Result<()> {
-    use std::io::Read;
+    use std::io::{Read, Write};
+
+    const SPINNER: &[u8] = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".as_bytes();
+    const SPINNER_CHARS: usize = 10;
+    const PROGRESS_INTERVAL: usize = 256 * 1024; // update every 256KB
 
     let mut buf = Vec::new();
     let mut chunk = [0u8; 64 * 1024];
     let mut total = 0usize;
-    let spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let mut last_progress = 0usize;
+    let stderr = std::io::stderr();
 
     loop {
         match std::io::stdin().read(&mut chunk) {
@@ -291,8 +274,18 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
             Ok(n) => {
                 buf.extend_from_slice(&chunk[..n]);
                 total += n;
-                let s = spinner[(total / 65536) % spinner.len()];
-                eprint!("\r\x1b[2m{} Reading stdin... {}\x1b[0m", s, format_bytes(total));
+                if total - last_progress >= PROGRESS_INTERVAL {
+                    last_progress = total;
+                    // Each braille char is 3 bytes UTF-8
+                    let idx = (total / PROGRESS_INTERVAL) % SPINNER_CHARS;
+                    let spin = &SPINNER[idx * 3..(idx + 1) * 3];
+                    let mut err = stderr.lock();
+                    let _ = write!(err, "\r\x1b[2m");
+                    let _ = err.write_all(spin);
+                    let _ = write!(err, " Reading stdin... ");
+                    write_bytes_human(&mut err, total);
+                    let _ = write!(err, "\x1b[0m");
+                }
             }
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e).context("Failed to read from stdin"),
@@ -300,31 +293,18 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
     }
 
     if total > 0 {
-        eprint!("\r\x1b[2K"); // clear progress line
+        let _ = write!(stderr.lock(), "\r\x1b[2K");
     }
 
     let text = String::from_utf8(buf).context("stdin is not valid UTF-8")?;
     let start = std::time::Instant::now();
 
-    // Try single JSON value first, then JSON Lines fallback.
     let value: serde_json::Value = match serde_json::from_str(&text) {
         Ok(v) => v,
         Err(single_err) => match try_json_lines(&text) {
             Some(v) => v,
             None => {
-                eprintln!("\x1b[1;31merror\x1b[0m: invalid JSON from stdin");
-                eprintln!("  --> line {}, column {}", single_err.line(), single_err.column());
-                eprintln!("  {}", single_err);
-                if let Some(error_line) = text.lines().nth(single_err.line().saturating_sub(1)) {
-                    eprintln!();
-                    eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", single_err.line(), error_line);
-                    if single_err.column() > 0 {
-                        eprintln!(
-                            "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
-                            " ".repeat(single_err.column().saturating_sub(1))
-                        );
-                    }
-                }
+                print_json_error("stdin", &text, single_err.line(), single_err.column(), &single_err.to_string());
                 std::process::exit(1);
             }
         },
@@ -338,34 +318,55 @@ pub fn run_stdin(theme: Theme) -> Result<()> {
 }
 
 /// Try parsing input as JSON Lines (one JSON value per line).
+/// Quick-checks the first non-empty line before committing to a full parse.
 fn try_json_lines(text: &str) -> Option<serde_json::Value> {
-    let mut values = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        match serde_json::from_str(trimmed) {
-            Ok(v) => values.push(v),
-            Err(_) => return None,
-        }
+    let first = text.lines().find(|l| !l.trim().is_empty())?;
+    let first_trimmed = first.trim();
+    // JSON Lines entries are typically objects or arrays
+    if !(first_trimmed.starts_with('{') || first_trimmed.starts_with('[')) {
+        return None;
     }
-    if values.len() >= 2 {
-        Some(serde_json::Value::Array(values))
-    } else {
-        None
+    // Verify the first line parses independently — if not, this isn't JSONL
+    serde_json::from_str::<serde_json::Value>(first_trimmed).ok()?;
+
+    let values: Result<Vec<_>, _> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(serde_json::from_str)
+        .collect();
+
+    match values {
+        Ok(v) if v.len() >= 2 => Some(serde_json::Value::Array(v)),
+        _ => None,
     }
 }
 
-fn format_bytes(bytes: usize) -> String {
+fn write_bytes_human(w: &mut impl std::io::Write, bytes: usize) {
     if bytes < 1024 {
-        format!("{} B", bytes)
+        let _ = write!(w, "{} B", bytes);
     } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
+        let _ = write!(w, "{:.1} KB", bytes as f64 / 1024.0);
     } else if bytes < 1024 * 1024 * 1024 {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+        let _ = write!(w, "{:.1} MB", bytes as f64 / (1024.0 * 1024.0));
     } else {
-        format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+        let _ = write!(w, "{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0));
+    }
+}
+
+fn print_json_error(source: &str, content: &str, line: usize, column: usize, message: &str) {
+    eprintln!("\x1b[1;31merror\x1b[0m: invalid JSON from \x1b[1m{}\x1b[0m", source);
+    eprintln!("  --> line {}, column {}", line, column);
+    eprintln!("  {}", message);
+    if let Some(error_line) = content.lines().nth(line.saturating_sub(1)) {
+        eprintln!();
+        eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", line, error_line);
+        if column > 0 {
+            eprintln!(
+                "  \x1b[2m     |\x1b[0m \x1b[1;31m{}^\x1b[0m",
+                " ".repeat(column.saturating_sub(1))
+            );
+        }
     }
 }
 
