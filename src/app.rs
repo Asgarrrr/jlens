@@ -249,8 +249,8 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
             eprintln!("  {}", message);
 
             // Try to show the offending line from the file
-            if let Ok(content) = std::fs::read_to_string(path) {
-                if let Some(error_line) = content.lines().nth(line.saturating_sub(1)) {
+            if let Ok(content) = std::fs::read_to_string(path)
+                && let Some(error_line) = content.lines().nth(line.saturating_sub(1)) {
                     eprintln!();
                     eprintln!("  \x1b[2m{:>4} |\x1b[0m {}", line, error_line);
                     if column > 0 {
@@ -260,7 +260,6 @@ pub fn run_file(path: &Path, theme: Theme) -> Result<()> {
                         );
                     }
                 }
-            }
             std::process::exit(1);
         }
         Err(e) => Err(e).with_context(|| format!("Failed to open {}", path.display())),
@@ -376,14 +375,13 @@ fn run_app(
                         area,
                     );
                 }
-            } else if app.export.active {
-                if let Some(area) = bottom_bar {
+            } else if app.export.active
+                && let Some(area) = bottom_bar {
                     frame.render_widget(
                         export::ExportBar { state: &app.export, theme: &app.theme },
                         area,
                     );
                 }
-            }
 
             let status_info = if app.filter.showing_result {
                 app.filter
@@ -587,11 +585,10 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 if let Some(node_id) = app.tree_view.selected_node_id() {
                     let path = app.document.path_of(node_id);
                     let ancestors = app.document.ancestors_of(node_id);
-                    if let Some(seg_idx) = ui::breadcrumb_hit_test(&path, mouse.column, status_area.x) {
-                        if let Some(&target) = ancestors.get(seg_idx) {
+                    if let Some(seg_idx) = ui::breadcrumb_hit_test(&path, mouse.column, status_area.x)
+                        && let Some(&target) = ancestors.get(seg_idx) {
                             app.tree_view.navigate_to_node(target);
                         }
-                    }
                 }
                 return;
             }
@@ -681,8 +678,8 @@ fn handle_action(app: &mut App, action: ViewAction) {
             app.expand_lazy_stub(stub_id);
         }
         ViewAction::CopyToClipboard(text) => {
-            if let Some(ref mut cb) = app.clipboard {
-                if cb.set_text(&text).is_ok() {
+            if let Some(ref mut cb) = app.clipboard
+                && cb.set_text(&text).is_ok() {
                     let preview = if text.chars().count() > 40 {
                         format!("{}...", crate::util::truncate_chars(&text, 37))
                     } else {
@@ -690,7 +687,6 @@ fn handle_action(app: &mut App, action: ViewAction) {
                     };
                     app.flash_message = Some((format!("Copied: {}", preview), 45));
                 }
-            }
         }
     }
 }

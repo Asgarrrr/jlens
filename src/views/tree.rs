@@ -242,8 +242,8 @@ impl TreeView {
     }
 
     fn toggle_expand(&mut self) {
-        if let Some(row) = self.visible_rows.get(self.selected) {
-            if row.is_expandable {
+        if let Some(row) = self.visible_rows.get(self.selected)
+            && row.is_expandable {
                 let id = row.node_id;
                 if self.expanded.contains(&id) {
                     self.expanded.remove(&id);
@@ -258,12 +258,11 @@ impl TreeView {
                     self.rebuild_visible_rows();
                 }
             }
-        }
     }
 
     fn expand(&mut self) {
-        if let Some(row) = self.visible_rows.get(self.selected) {
-            if row.is_expandable && !row.is_expanded {
+        if let Some(row) = self.visible_rows.get(self.selected)
+            && row.is_expandable && !row.is_expanded {
                 if self.stub_ids.contains(&row.node_id) {
                     self.pending_expand_stub = Some(row.node_id);
                 } else {
@@ -272,7 +271,6 @@ impl TreeView {
                     self.rebuild_visible_rows();
                 }
             }
-        }
     }
 
     fn collapse(&mut self) {

@@ -139,8 +139,8 @@ impl DiffView {
     // -----------------------------------------------------------------------
 
     fn toggle_expand(&mut self) {
-        if let Some(row) = self.rows.get(self.scroll.selected) {
-            if row.is_container {
+        if let Some(row) = self.rows.get(self.scroll.selected)
+            && row.is_container {
                 let path = row.node_path.clone();
                 if self.expanded.contains(&path) {
                     self.expanded.remove(&path);
@@ -149,25 +149,22 @@ impl DiffView {
                 }
                 self.rebuild_rows();
             }
-        }
     }
 
     fn expand(&mut self) {
-        if let Some(row) = self.rows.get(self.scroll.selected) {
-            if row.is_container && !row.is_expanded {
+        if let Some(row) = self.rows.get(self.scroll.selected)
+            && row.is_container && !row.is_expanded {
                 self.expanded.insert(row.node_path.clone());
                 self.rebuild_rows();
             }
-        }
     }
 
     fn collapse(&mut self) {
-        if let Some(row) = self.rows.get(self.scroll.selected) {
-            if row.is_expanded {
+        if let Some(row) = self.rows.get(self.scroll.selected)
+            && row.is_expanded {
                 self.expanded.remove(&row.node_path);
                 self.rebuild_rows();
             }
-        }
     }
 
     // -----------------------------------------------------------------------

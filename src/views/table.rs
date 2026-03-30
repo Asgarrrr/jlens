@@ -38,23 +38,21 @@ fn find_table_data(doc: &JsonDocument) -> TableData {
     let root_node = doc.node(root);
 
     // Case 1: root is an array of objects
-    if let JsonValue::Array(children) = &root_node.value {
-        if is_array_of_objects(doc, children) {
+    if let JsonValue::Array(children) = &root_node.value
+        && is_array_of_objects(doc, children) {
             let (columns, rows) = build_table(doc, children);
             return TableData::Found { columns, rows };
         }
-    }
 
     // Case 2: root is an object — find first child that is an array of objects
     if let JsonValue::Object(entries) = &root_node.value {
         for (_, child_id) in entries {
             let child = doc.node(*child_id);
-            if let JsonValue::Array(children) = &child.value {
-                if is_array_of_objects(doc, children) {
+            if let JsonValue::Array(children) = &child.value
+                && is_array_of_objects(doc, children) {
                     let (columns, rows) = build_table(doc, children);
                     return TableData::Found { columns, rows };
                 }
-            }
         }
     }
 
