@@ -256,7 +256,7 @@ impl App {
             self.table_view.as_mut().map(|v| v as &mut dyn View),
             self.path_view.as_mut().map(|v| v as &mut dyn View),
             self.stats_view.as_mut().map(|v| v as &mut dyn View),
-            self.filter.result_view.as_mut().map(|v| v as &mut dyn View),
+            self.filter.result.as_mut().map(|r| &mut r.view as &mut dyn View),
         ];
         for view in views.into_iter().flatten() {
             view.set_viewport_height(height);
@@ -485,7 +485,7 @@ fn run_app(
                 ui::render_toolbar(frame, toolbar, app.active_mode, &app.theme);
 
                 // Main view: bordered block with view name as title
-                let view_title = if app.filter.showing_result {
+                let view_title = if !app.filter.active && app.filter.has_result() {
                     " Filter Result "
                 } else {
                     match app.active_mode {
@@ -512,7 +512,7 @@ fn run_app(
 
                 // If filter is active, render input bar at top, live tree below
                 let view_area = if app.filter.active {
-                    let used = filter::render_filter_panel(
+                    let used = filter::render_filter_bar(
                         frame, &app.filter, inner, &app.theme,
                     );
                     let below = Rect::new(
@@ -522,8 +522,8 @@ fn run_app(
                         inner.height.saturating_sub(used),
                     );
                     // Show live filtered tree, or the original view if no results yet
-                    if let Some(ref live_view) = app.filter.live_view {
-                        live_view.render(frame, below, &app.theme);
+                    if let Some(ref res) = app.filter.result {
+                        res.view.render(frame, below, &app.theme);
                     } else {
                         app.active_view().render(frame, below, &app.theme);
                     }
@@ -536,9 +536,9 @@ fn run_app(
                 app.update_viewport_height(view_area.height as usize);
 
                 if !app.filter.active {
-                    if app.filter.showing_result {
-                        if let Some(ref result_view) = app.filter.result_view {
-                            result_view.render(frame, view_area, &app.theme);
+                    if app.filter.has_result() {
+                        if let Some(ref res) = app.filter.result {
+                            res.view.render(frame, view_area, &app.theme);
                         }
                     } else {
                         app.active_view().render(frame, view_area, &app.theme);
@@ -592,11 +592,11 @@ fn run_app(
                     }
                 }
 
-                let status_info = if app.filter.showing_result {
+                let status_info = if app.filter.has_result() {
                     app.filter
-                        .result_view
+                        .result
                         .as_ref()
-                        .map(|v| v.status_info())
+                        .map(|r| r.view.status_info())
                         .unwrap_or_else(|| crate::views::StatusInfo {
                             cursor_path: "$".to_string(),
                             extra: None,
@@ -606,7 +606,7 @@ fn run_app(
                 };
                 let metadata = app.document.metadata();
                 // Prepend filter indicator to flash message when showing results.
-                let filter_indicator: Option<String> = if app.filter.showing_result {
+                let filter_indicator: Option<String> = if app.filter.has_result() {
                     Some(format!("[Filter: {}]", app.filter.query))
                 } else {
                     None
@@ -653,6 +653,12 @@ fn run_app(
                     app.needs_redraw = true;
                 }
 
+                // Debounced filter query execution (runs on tick after debounce delay)
+                if app.filter.active && app.filter.should_eval() {
+                    filter::evaluate(&mut app.filter, &app.document, &mut app.filter_value_cache, app.last_viewport_height);
+                    app.needs_redraw = true;
+                }
+
                 // Decay flash message
                 if let Some((_, ref mut ttl)) = app.flash_message {
                     if *ttl == 0 {
@@ -694,16 +700,11 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
 
     if app.filter.active {
         match app.filter.handle_input_key(key) {
-            FilterAction::CloseInput => app.filter.close_input(),
-            FilterAction::RunFilter => {
-                filter::run_filter(&mut app.filter, &app.document, app.last_viewport_height);
-            }
-            FilterAction::None
-            | FilterAction::CloseResult
-            | FilterAction::ReopenInput
-            | FilterAction::DelegateToResult(_) => {}
+            FilterAction::Close => app.filter.close(),
+            FilterAction::Apply => app.filter.close(), // result already computed by live evaluator
+            FilterAction::None | FilterAction::Reopen | FilterAction::DelegateToResult(_) => {}
         }
-        // Update suggestions + live preview (with caching to avoid per-keystroke rebuilds)
+        // Update suggestions immediately (cheap); tree rebuild is debounced via tick handler
         if app.filter.active {
             let root = app.effective_root();
             filter::update_suggestions(
@@ -712,20 +713,14 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 root,
                 &mut app.filter_fields_cache,
             );
-            filter::update_live_view(
-                &mut app.filter,
-                &app.document,
-                &mut app.filter_value_cache,
-                app.last_viewport_height,
-            );
         }
         return;
     }
 
-    if app.filter.showing_result {
+    if !app.filter.active && app.filter.has_result() {
         match app.filter.handle_result_key(key) {
-            FilterAction::CloseResult => app.filter.close_result(),
-            FilterAction::ReopenInput => app.filter.reopen(),
+            FilterAction::Close => app.filter.clear_result(),
+            FilterAction::Reopen => app.filter.reopen(),
             FilterAction::DelegateToResult(k) => {
                 if let Some(action) = app.keymap.resolve(&k) {
                     // Only pass navigation actions to the result view.
@@ -744,8 +739,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                         | Action::CollapseAll
                         | Action::CopyValue
                         | Action::CopyPath => {
-                            if let Some(ref mut view) = app.filter.result_view {
-                                let va = view.handle_action(action);
+                            if let Some(ref mut res) = app.filter.result {
+                                let va = res.view.handle_action(action);
                                 handle_action(app, va);
                             }
                         }
@@ -753,7 +748,7 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                     }
                 }
             }
-            FilterAction::None | FilterAction::CloseInput | FilterAction::RunFilter => {}
+            FilterAction::None | FilterAction::Apply => {}
         }
         return;
     }
@@ -809,11 +804,11 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
     /// Dispatch a scroll action to the currently visible view,
     /// routing the returned `ViewAction` through `handle_action`.
     fn scroll_view(app: &mut App, action: Action) {
-        let view_action = if app.filter.showing_result {
+        let view_action = if !app.filter.active && app.filter.has_result() {
             app.filter
-                .result_view
+                .result
                 .as_mut()
-                .map(|v| v.handle_action(action))
+                .map(|r| r.view.handle_action(action))
                 .unwrap_or(ViewAction::None)
         } else {
             app.active_view_mut().handle_action(action)
@@ -826,7 +821,7 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
         MouseEventKind::ScrollDown => scroll_view(app, Action::MoveDown),
         MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
             // Breadcrumb click: clicking a path segment in the status bar navigates there.
-            if !app.filter.showing_result
+            if !app.filter.has_result()
                 && mouse.row >= status_area.y
                 && mouse.row < status_area.y + status_area.height
                 && mouse.column >= status_area.x
@@ -853,9 +848,9 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 && mouse.row < main_area.y + main_area.height
             {
                 let clicked_row = (mouse.row - main_area.y) as usize;
-                if app.filter.showing_result {
-                    if let Some(ref mut v) = app.filter.result_view {
-                        v.click_row(clicked_row);
+                if !app.filter.active && app.filter.has_result() {
+                    if let Some(ref mut res) = app.filter.result {
+                        res.view.click_row(clicked_row);
                     }
                 } else {
                     app.click_row(clicked_row);
