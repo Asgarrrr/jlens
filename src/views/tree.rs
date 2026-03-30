@@ -400,7 +400,7 @@ impl TreeView {
 
         // Array index (if in an array)
         if let Some(idx) = row.array_index {
-            spans.push(Span::styled(format!("[{}] ", idx), theme.fg_dim_style));
+            spans.push(Span::styled(format!("[{}] ", idx), theme.number));
         }
 
         // Value rendering
@@ -428,11 +428,11 @@ impl TreeView {
                 spans.push(Span::styled("[", theme.bracket));
                 if !row.is_expanded {
                     let label = if is_stub {
-                        "\u{2026}".into() // "…"
+                        "\u{2026}".into()
                     } else {
-                        format!("{} items", node.value.child_count())
+                        format!("{}", node.value.child_count())
                     };
-                    spans.push(Span::styled(label, theme.fg_dim_style));
+                    spans.push(Span::styled(label, theme.null));
                     spans.push(Span::styled("]", theme.bracket));
                 }
             }
@@ -441,11 +441,11 @@ impl TreeView {
                 spans.push(Span::styled("{", theme.bracket));
                 if !row.is_expanded {
                     let label = if is_stub {
-                        "\u{2026}".into() // "…"
+                        "\u{2026}".into()
                     } else {
-                        format!("{} keys", node.value.child_count())
+                        format!("{}", node.value.child_count())
                     };
-                    spans.push(Span::styled(label, theme.fg_dim_style));
+                    spans.push(Span::styled(label, theme.null));
                     spans.push(Span::styled("}", theme.bracket));
                 }
             }

@@ -268,6 +268,25 @@ pub(crate) fn render(
     area: Rect,
     theme: &Theme,
 ) {
+    if area.height < 2 {
+        return;
+    }
+
+    // Separator line at top
+    let [sep_area, content_area] = ratatui::layout::Layout::vertical([
+        ratatui::layout::Constraint::Length(1),
+        ratatui::layout::Constraint::Min(1),
+    ])
+    .areas(area);
+
+    let sep = Line::from(Span::styled(
+        "\u{2500}".repeat(sep_area.width as usize),
+        theme.tree_guide_style,
+    ));
+    frame.render_widget(ratatui::widgets::Paragraph::new(sep), sep_area);
+
+    let area = content_area;
+
     match content {
         PreviewContent::Sparkline {
             values,
@@ -355,14 +374,21 @@ pub(crate) fn render(
         PreviewContent::KeySummary { entries } => {
             let mut lines = Vec::new();
             lines.push(Line::from(Span::styled(
-                format!(" Object ({} keys)", entries.len()),
+                format!(" Object \u{2502} {} keys", entries.len()),
                 theme.fg_dim_style,
             )));
             for (key, type_name, preview) in entries {
+                let value_style = match *type_name {
+                    "string" => theme.string,
+                    "number" => theme.number,
+                    "boolean" => theme.boolean,
+                    "null" => theme.null,
+                    _ => theme.fg_dim_style,
+                };
                 lines.push(Line::from(vec![
-                    Span::styled(format!(" {}: ", key), theme.key),
-                    Span::styled(format!("{} ", type_name), theme.fg_dim_style),
-                    Span::styled(preview.as_str(), theme.fg_style),
+                    Span::styled(format!("  {}", key), theme.key),
+                    Span::styled(": ", theme.tree_guide_style),
+                    Span::styled(preview.as_str(), value_style),
                 ]));
             }
             frame.render_widget(
