@@ -257,6 +257,16 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// Recompute all composite styles from base colors.
+    /// Call this after modifying any of `bg`, `fg`, `fg_dim`, or `selection_bg`.
+    fn recompute_composites(&mut self) {
+        self.bg_style = Style::new().bg(self.bg);
+        self.fg_style = Style::new().fg(self.fg);
+        self.fg_dim_style = Style::new().fg(self.fg_dim);
+        self.fg_bold_style = Style::new().fg(self.fg).add_modifier(Modifier::BOLD);
+        self.selection_style = Style::new().fg(self.fg).bg(self.selection_bg);
+    }
+
     /// Build a theme from config: base theme + hex color overrides.
     pub fn from_config(base: Option<&str>, overrides: &std::collections::HashMap<String, String>) -> Self {
         let mut theme = match base {
@@ -270,10 +280,10 @@ impl Theme {
                 continue;
             };
             match key.as_str() {
-                "bg" => { theme.bg = color; theme.bg_style = Style::new().bg(color); }
-                "fg" => { theme.fg = color; theme.fg_style = Style::new().fg(color); }
-                "fg_dim" => { theme.fg_dim = color; theme.fg_dim_style = Style::new().fg(color); }
-                "selection_bg" => { theme.selection_bg = color; theme.selection_style = Style::new().fg(theme.fg).bg(color); }
+                "bg" => { theme.bg = color; }
+                "fg" => { theme.fg = color; }
+                "fg_dim" => { theme.fg_dim = color; }
+                "selection_bg" => { theme.selection_bg = color; }
                 "key" => { theme.key = Style::new().fg(color).add_modifier(Modifier::BOLD); }
                 "string" => { theme.string = Style::new().fg(color); }
                 "number" => { theme.number = Style::new().fg(color); }
@@ -285,6 +295,11 @@ impl Theme {
                 }
             }
         }
+
+        // Rebuild all composite styles after all overrides are applied so that
+        // dependent styles (fg_bold_style, selection_style, etc.) use the final
+        // base colors rather than whatever was set mid-loop.
+        theme.recompute_composites();
 
         theme
     }

@@ -158,6 +158,11 @@ fn search_node(
 ///
 /// When a pre-compiled regex is provided it is used directly (regex mode).
 /// Otherwise plain substring matching with optional case folding is used.
+/// The case-insensitive path avoids allocation by doing a sliding-window
+/// byte comparison using `eq_ignore_ascii_case`; this is correct for
+/// ASCII content (the common case). Non-ASCII haystacks are handled by
+/// comparing against the pre-lowercased query via `to_lowercase()` only
+/// when the haystack actually contains non-ASCII bytes.
 #[inline]
 fn matches_value(
     haystack: &str,
@@ -169,8 +174,21 @@ fn matches_value(
         re.is_match(haystack)
     } else if options.case_sensitive {
         haystack.contains(query)
+    } else if query.is_empty() {
+        false
     } else {
-        haystack.to_lowercase().contains(query)
+        let qb = query.as_bytes();
+        let hb = haystack.as_bytes();
+        if hb.len() < qb.len() {
+            return false;
+        }
+        // Fast path: all ASCII — no allocation needed.
+        if haystack.is_ascii() {
+            hb.windows(qb.len()).any(|w| w.eq_ignore_ascii_case(qb))
+        } else {
+            // Slow path: Unicode content — fall back to allocation.
+            haystack.to_lowercase().contains(query)
+        }
     }
 }
 

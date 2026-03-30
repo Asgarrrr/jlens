@@ -39,7 +39,9 @@ impl ExportState {
             (mods, KeyCode::Char(c))
                 if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
-                self.filename.push(c);
+                if self.filename.len() < 256 {
+                    self.filename.push(c);
+                }
                 ExportAction::None
             }
             _ => ExportAction::None,

@@ -379,19 +379,31 @@ fn build_table(
     (column_set, rows)
 }
 
-/// Pad a string with spaces to `width` chars, or truncate with ellipsis if longer.
+/// Pad a string with spaces to `width` terminal columns, or truncate with
+/// ellipsis if longer. Uses `display_width` so that wide (CJK) characters
+/// are accounted for correctly.
 fn pad_or_truncate(s: &str, width: usize) -> String {
-    let char_count = s.chars().count();
-    if char_count >= width {
+    let dw = crate::util::display_width(s);
+    if dw >= width {
         if width == 0 {
             return String::new();
         }
-        format!(
-            "{}\u{2026}",
-            crate::util::truncate_chars(s, width.saturating_sub(1))
-        )
+        // Truncate by display width: walk chars, accumulating column widths.
+        let target = width.saturating_sub(1); // reserve 1 column for ellipsis
+        let mut cols = 0usize;
+        let mut byte_end = 0usize;
+        for ch in s.chars() {
+            let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+            if cols + cw > target {
+                break;
+            }
+            cols += cw;
+            byte_end += ch.len_utf8();
+        }
+        format!("{}\u{2026}", &s[..byte_end])
     } else {
-        format!("{}{}", s, " ".repeat(width - char_count))
+        // Pad: dw < width, so we need (width - dw) spaces.
+        format!("{}{}", s, " ".repeat(width - dw))
     }
 }
 

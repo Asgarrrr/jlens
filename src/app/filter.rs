@@ -72,8 +72,10 @@ impl FilterState {
             (mods, KeyCode::Char(c))
                 if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
-                self.query.push(c);
-                self.error = None;
+                if self.query.len() < 1024 {
+                    self.query.push(c);
+                    self.error = None;
+                }
                 FilterAction::None
             }
             _ => FilterAction::None,

@@ -202,7 +202,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "Press ? or Esc to close",
+        "Press any key to close",
         theme.fg_dim_style,
     )));
 

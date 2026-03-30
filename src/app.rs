@@ -240,6 +240,7 @@ pub struct Options {
     pub theme: Theme,
     pub keymap: KeyMap,
     pub tick_ms: u64,
+    pub search_regex: bool,
 }
 
 pub fn run_file_with(path: &Path, opts: Options) -> Result<()> {
@@ -385,7 +386,9 @@ fn run_app(
     opts: Options,
 ) -> Result<()> {
     let tick = Duration::from_millis(opts.tick_ms);
+    let search_regex = opts.search_regex;
     let mut app = App::new(document, opts.theme, opts.keymap);
+    app.search.regex_mode = search_regex;
     if let Some(lazy) = lazy {
         app.set_lazy_document(lazy);
     }

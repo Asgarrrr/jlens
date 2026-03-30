@@ -33,7 +33,6 @@ impl Default for GeneralConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct SearchConfig {
-    pub case_sensitive: bool,
     pub regex: bool,
 }
 
@@ -88,7 +87,6 @@ impl Config {
 # tick_rate_ms = 33       # render interval (30fps)
 
 [search]
-# case_sensitive = false
 # regex = false
 
 [keybindings]

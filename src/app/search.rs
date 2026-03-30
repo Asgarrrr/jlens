@@ -101,8 +101,10 @@ impl SearchState {
             (mods, KeyCode::Char(c))
                 if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
             {
-                self.query.push(c);
-                self.mark_dirty();
+                if self.query.len() < 1024 {
+                    self.query.push(c);
+                    self.mark_dirty();
+                }
                 SearchAction::QueryChanged
             }
             (KeyModifiers::CONTROL, KeyCode::Char('n')) | (KeyModifiers::NONE, KeyCode::Down) => {
