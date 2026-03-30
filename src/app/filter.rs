@@ -65,6 +65,16 @@ impl FilterState {
         self.live_error = None;
     }
 
+    /// Reopen the filter input preserving the existing query.
+    pub(crate) fn reopen(&mut self) {
+        self.active = true;
+        self.error = None;
+        self.show_suggestions = false;
+        self.live_results.clear();
+        self.live_count = 0;
+        self.live_error = None;
+    }
+
     pub(crate) fn close_input(&mut self) {
         self.active = false;
         self.error = None;
@@ -97,15 +107,13 @@ impl FilterState {
             (KeyModifiers::NONE, KeyCode::Tab) => {
                 if !self.suggestions.is_empty() {
                     if self.show_suggestions {
-                        // Cycle to next suggestion
                         self.suggestion_idx = (self.suggestion_idx + 1) % self.suggestions.len();
                     } else {
                         self.show_suggestions = true;
                         self.suggestion_idx = 0;
                     }
-                } else {
-                    self.show_suggestions = true;
                 }
+                // No-op if suggestions empty — don't enter suggestion mode
                 FilterAction::None
             }
             (KeyModifiers::SHIFT, KeyCode::BackTab) if self.show_suggestions => {
@@ -356,9 +364,9 @@ pub(crate) fn render_suggestions(
     let popup_height = max_shown as u16 + 2; // +2 for top/bottom border
     let popup_width = bar_area.width.min(45);
 
-    // Position above the filter bar, clamped to screen bounds
+    // Position above the input line, clamped to stay inside the overlay
     let screen = frame.area();
-    let popup_y = bar_area.y.saturating_sub(popup_height);
+    let popup_y = bar_area.y.saturating_sub(popup_height).max(1); // never overlap toolbar
     let popup_x = (bar_area.x + 3).min(screen.width.saturating_sub(popup_width));
     let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
 
@@ -435,7 +443,7 @@ pub(crate) fn update_live_preview(
                 .map(|v| {
                     let s = serde_json::to_string(v).unwrap_or_default();
                     if s.len() > 120 {
-                        format!("{}...", &s[..117])
+                        format!("{}...", crate::util::truncate_chars(&s, 117))
                     } else {
                         s
                     }

@@ -686,15 +686,32 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
     if app.filter.showing_result {
         match app.filter.handle_result_key(key) {
             FilterAction::CloseResult => app.filter.close_result(),
-            FilterAction::ReopenInput => app.filter.open(),
+            FilterAction::ReopenInput => app.filter.reopen(),
             FilterAction::DelegateToResult(k) => {
                 if let Some(action) = app.keymap.resolve(&k) {
-                    let view_action = if let Some(ref mut view) = app.filter.result_view {
-                        view.handle_action(action)
-                    } else {
-                        ViewAction::None
-                    };
-                    handle_action(app, view_action);
+                    // Only pass navigation actions to the result view.
+                    // Block global actions (Quit, SwitchView, etc.) to avoid confusing state.
+                    match action {
+                        Action::MoveUp
+                        | Action::MoveDown
+                        | Action::PageUp
+                        | Action::PageDown
+                        | Action::Home
+                        | Action::End
+                        | Action::ToggleExpand
+                        | Action::ExpandNode
+                        | Action::CollapseNode
+                        | Action::ExpandAll
+                        | Action::CollapseAll
+                        | Action::CopyValue
+                        | Action::CopyPath => {
+                            if let Some(ref mut view) = app.filter.result_view {
+                                let va = view.handle_action(action);
+                                handle_action(app, va);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             FilterAction::None | FilterAction::CloseInput | FilterAction::RunFilter => {}
