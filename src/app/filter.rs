@@ -11,7 +11,7 @@ use crate::views::View;
 use crate::views::raw;
 use crate::views::tree::TreeView;
 
-const DEBOUNCE: Duration = Duration::from_millis(150);
+const DEBOUNCE: Duration = Duration::from_millis(50); // fast feedback
 
 // ---------------------------------------------------------------------------
 // State
@@ -127,17 +127,12 @@ impl FilterState {
 
     pub(crate) fn handle_input_key(&mut self, key: KeyEvent) -> FilterAction {
         match (key.modifiers, key.code) {
-            // Modal
-            (KeyModifiers::NONE, KeyCode::Esc) => {
-                if self.show_suggestions {
-                    self.show_suggestions = false;
-                    FilterAction::None
-                } else {
-                    FilterAction::Close
-                }
-            }
+            // Esc always closes — one keystroke, no ambiguity
+            (KeyModifiers::NONE, KeyCode::Esc) => FilterAction::Close,
+
+            // Enter: accept suggestion if visible, otherwise apply filter
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                if self.show_suggestions {
+                if self.show_suggestions && !self.suggestions.is_empty() {
                     self.accept_suggestion();
                     self.mark_edited();
                     FilterAction::None
@@ -151,41 +146,41 @@ impl FilterState {
                 }
             }
 
-            // Suggestions
+            // Tab: accept current suggestion or cycle if already accepted
             (KeyModifiers::NONE, KeyCode::Tab) => {
-                if !self.suggestions.is_empty() {
-                    if self.show_suggestions {
-                        self.suggestion_idx = (self.suggestion_idx + 1) % self.suggestions.len();
-                    } else {
-                        self.show_suggestions = true;
-                        self.suggestion_idx = 0;
-                    }
+                if self.show_suggestions && !self.suggestions.is_empty() {
+                    self.accept_suggestion();
+                    self.mark_edited();
                 }
-                FilterAction::None
-            }
-            (KeyModifiers::SHIFT, KeyCode::BackTab) if self.show_suggestions => {
-                if !self.suggestions.is_empty() {
-                    self.suggestion_idx = if self.suggestion_idx == 0 {
-                        self.suggestions.len() - 1
-                    } else {
-                        self.suggestion_idx - 1
-                    };
-                }
-                FilterAction::None
-            }
-            (KeyModifiers::NONE, KeyCode::Down) if self.show_suggestions => {
-                if self.suggestion_idx + 1 < self.suggestions.len() {
-                    self.suggestion_idx += 1;
-                }
-                FilterAction::None
-            }
-            (KeyModifiers::NONE, KeyCode::Up) if self.show_suggestions => {
-                self.suggestion_idx = self.suggestion_idx.saturating_sub(1);
                 FilterAction::None
             }
 
-            // History
+            // Down/Up: navigate suggestions if visible, otherwise history
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                if self.show_suggestions && !self.suggestions.is_empty() {
+                    self.suggestion_idx = (self.suggestion_idx + 1) % self.suggestions.len();
+                    return FilterAction::None;
+                }
+                // History: forward
+                if let Some(idx) = self.history_idx {
+                    if idx + 1 < self.history.len() {
+                        self.history_idx = Some(idx + 1);
+                        self.query = self.history[idx + 1].clone();
+                    } else {
+                        self.history_idx = None;
+                        self.query = self.history_draft.clone();
+                    }
+                    self.cursor = self.query.len();
+                    self.mark_edited();
+                }
+                FilterAction::None
+            }
             (KeyModifiers::NONE, KeyCode::Up) => {
+                if self.show_suggestions && !self.suggestions.is_empty() {
+                    self.suggestion_idx = self.suggestion_idx.saturating_sub(1);
+                    return FilterAction::None;
+                }
+                // History: backward
                 if !self.history.is_empty() {
                     match self.history_idx {
                         None => {
@@ -202,20 +197,6 @@ impl FilterState {
                         self.cursor = self.query.len();
                         self.mark_edited();
                     }
-                }
-                FilterAction::None
-            }
-            (KeyModifiers::NONE, KeyCode::Down) => {
-                if let Some(idx) = self.history_idx {
-                    if idx + 1 < self.history.len() {
-                        self.history_idx = Some(idx + 1);
-                        self.query = self.history[idx + 1].clone();
-                    } else {
-                        self.history_idx = None;
-                        self.query = self.history_draft.clone();
-                    }
-                    self.cursor = self.query.len();
-                    self.mark_edited();
                 }
                 FilterAction::None
             }
@@ -307,7 +288,8 @@ impl FilterState {
                     self.query.insert(self.cursor, c);
                     self.cursor += c.len_utf8();
                     self.mark_edited();
-                    self.show_suggestions = false;
+                    // Auto-show suggestions after . or | (the most common trigger points)
+                    self.show_suggestions = matches!(c, '.' | '|');
                 }
                 FilterAction::None
             }
