@@ -292,6 +292,7 @@ pub struct Options {
     pub keymap: KeyMap,
     pub tick_ms: u64,
     pub search_regex: bool,
+    pub default_view: String,
 }
 
 pub fn run_file_with(path: &Path, opts: Options) -> Result<()> {
@@ -435,7 +436,16 @@ fn run_app(
 ) -> Result<()> {
     let tick = Duration::from_millis(opts.tick_ms);
     let search_regex = opts.search_regex;
+    let default_view = match opts.default_view.as_str() {
+        "table" => ViewMode::Table,
+        "raw" => ViewMode::Raw,
+        "paths" => ViewMode::Paths,
+        "stats" => ViewMode::Stats,
+        _ => ViewMode::Tree,
+    };
     let mut app = App::new(document, opts.theme, opts.keymap);
+    app.active_mode = default_view;
+    app.ensure_view(default_view);
     app.search.regex_mode = search_regex;
     if let Some(lazy) = lazy {
         app.set_lazy_document(lazy);
@@ -492,6 +502,21 @@ fn run_app(
                 );
                 let inner = view_block.inner(main_area_full);
                 frame.render_widget(view_block, main_area_full);
+
+                // Update cached geometry used by mouse hit-testing and scroll logic.
+                app.last_main_area = inner;
+                let new_height = inner.height as usize;
+                if app.last_viewport_height != new_height {
+                    app.last_viewport_height = new_height;
+                    app.tree_view.set_viewport_height(new_height);
+                    if let Some(ref mut v) = app.raw_view   { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.table_view { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.path_view  { v.set_viewport_height(new_height); }
+                    if let Some(ref mut v) = app.stats_view { v.set_viewport_height(new_height); }
+                    if let Some(ref mut res) = app.filter.result {
+                        res.view.set_viewport_height(new_height);
+                    }
+                }
 
                 // Render the active view (or filtered result)
                 if app.filter.active {
@@ -1003,6 +1028,8 @@ fn handle_action(app: &mut App, action: ViewAction) {
                     text
                 };
                 app.flash_message = Some((format!("Copied: {}", preview), 45));
+            } else {
+                app.flash_message = Some(("Clipboard unavailable".into(), 45));
             }
         }
     }

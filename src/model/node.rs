@@ -11,9 +11,6 @@ use std::time::Duration;
 pub struct NodeId(u32);
 
 impl NodeId {
-    #[allow(dead_code)]
-    pub const ROOT: Self = Self(0);
-
     #[inline]
     pub fn from_raw(raw: u32) -> Self {
         Self(raw)

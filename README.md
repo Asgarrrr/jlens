@@ -28,7 +28,7 @@ Open any JSON file, any size, instantly. Navigate, search, filter, diff, export 
 
 **Zoom mode** (`z`/`Z`) — zoom into any container node. It becomes the root. All views reflect the subtree. Stack-based: zoom → zoom → pop → pop.
 
-**Adaptive preview pane** (`p`) — toggle a bottom panel that auto-detects content:
+**Adaptive preview pane** (`p`) — toggle a side panel that auto-detects content:
 - Array of numbers → sparkline chart with min/max/avg
 - Array of objects → auto-table preview (first 10 rows)
 - Array of strings → scrollable list
@@ -114,7 +114,7 @@ jlens a.json --diff b.json             # structural diff
 |-----|--------|
 | `Tab` | Next column |
 | `Shift+Tab` | Previous column |
-| `s` | Cycle sort |
+| `s` | Toggle sort direction |
 
 ### Global
 
@@ -167,18 +167,16 @@ src/
     filter.rs         Filter state + bar widget
   keymap.rs           Action enum + key-to-action mapping
   event.rs            Terminal event polling
+  config.rs           TOML config loading
   preview.rs          Adaptive preview pane (sparkline, table, string detection)
   finder.rs           Fuzzy path finder overlay
-  config.rs           TOML config loading
   model/
     node.rs           Arena-based JSON document model
     lazy.rs           Mmap-backed lazy loading with shallow parse
   parser/
     detect.rs         Auto-detect parse strategy by file size
-    full.rs           Full serde_json parse
-    mmap.rs           Memory-mapped file parse
     scan.rs           Byte-level JSON scanner
-    streaming.rs      Streaming parse support
+    streaming.rs      Mmap-backed lazy parse
   views/
     tree.rs           Collapsible tree view
     table.rs          Auto-detected table view

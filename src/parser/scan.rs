@@ -46,18 +46,6 @@ pub fn skip_value(bytes: &[u8], offset: usize) -> Result<usize, ParseError> {
     }
 }
 
-/// Find the start position of the next value (skips whitespace) and return it.
-/// Returns `Err` if the end of input is reached.
-#[allow(dead_code)]
-pub fn find_value_start(bytes: &[u8], offset: usize) -> Result<usize, ParseError> {
-    let i = skip_whitespace(bytes, offset);
-    if i >= bytes.len() {
-        Err(scan_error(i, "unexpected end of input"))
-    } else {
-        Ok(i)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Container scanner — matches `{`…`}` and `[`…`]`
 // ---------------------------------------------------------------------------

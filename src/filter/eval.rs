@@ -193,7 +193,7 @@ fn apply_builtin(input: Value, builtin: &BuiltinFn) -> Result<Vec<Value>, Filter
         BuiltinFn::Type => {
             let t = match &input {
                 Value::Null => "null",
-                Value::Bool(_) => "boolean",
+                Value::Bool(_) => "bool",
                 Value::Number(_) => "number",
                 Value::String(_) => "string",
                 Value::Array(_) => "array",

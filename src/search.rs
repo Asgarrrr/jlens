@@ -6,11 +6,12 @@ use crate::model::node::{JsonDocument, JsonValue, NodeId};
 #[derive(Debug, Clone)]
 pub struct SearchHit {
     pub node_id: NodeId,
+    /// Records whether the match was on a key or a value.
     #[allow(dead_code)]
     pub match_in: MatchLocation,
 }
 
-/// Where the match was found.
+/// Where the match was found within a node.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum MatchLocation {

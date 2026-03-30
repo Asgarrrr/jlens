@@ -136,6 +136,7 @@ fn main() -> Result<()> {
         keymap,
         tick_ms: cfg.general.tick_rate_ms,
         search_regex: cfg.search.regex,
+        default_view: cfg.general.default_view.clone(),
     };
 
     match cli.file {

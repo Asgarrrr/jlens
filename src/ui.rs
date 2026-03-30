@@ -109,6 +109,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         ("", ""),
         ("Views", ""),
         ("1-5", "Switch view mode"),
+        ("v", "View selector menu"),
         ("Tab / Shift+Tab", "Cycle sort column (table)"),
         ("s", "Toggle sort direction (table)"),
         ("", ""),
