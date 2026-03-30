@@ -467,10 +467,25 @@ pub(crate) fn render_filter_bar(
         sep_area,
     );
 
-    // Suggestion popup — render BELOW the input (since filter is at top of view)
-    render_suggestions(frame, filter, input_area, theme);
+    // Note: suggestions are rendered separately AFTER the tree view
+    // to ensure correct z-ordering (see render_filter_suggestions).
 
     2
+}
+
+/// Render the suggestion popup. Must be called AFTER the main view renders
+/// to ensure the popup appears on top.
+pub(crate) fn render_filter_suggestions(
+    frame: &mut ratatui::Frame,
+    filter: &FilterState,
+    filter_bar_area: Rect,
+    theme: &Theme,
+) {
+    if !filter.active {
+        return;
+    }
+    let input_area = Rect::new(filter_bar_area.x, filter_bar_area.y, filter_bar_area.width, 1);
+    render_suggestions(frame, filter, input_area, theme);
 }
 
 fn render_suggestions(

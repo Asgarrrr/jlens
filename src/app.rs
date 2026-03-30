@@ -618,7 +618,16 @@ fn run_app(
                     .or(filter_indicator.as_deref());
                 ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
 
-                // (filter overlay removed — now rendered inline above main view)
+                // Overlays (rendered last for correct z-ordering)
+                if app.filter.active {
+                    let bar_area = Rect::new(
+                        inner.x,
+                        inner.y,
+                        inner.width,
+                        2,
+                    );
+                    filter::render_filter_suggestions(frame, &app.filter, bar_area, &app.theme);
+                }
 
                 if app.show_help {
                     ui::render_help_overlay(frame, frame.area(), &app.theme);
