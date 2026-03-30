@@ -1,5 +1,4 @@
 use ratatui::layout::Rect;
-use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Sparkline;
 use ratatui::Frame;
@@ -15,11 +14,6 @@ pub(crate) enum PreviewContent {
         max: f64,
         avg: f64,
         count: usize,
-    },
-    Table {
-        headers: Vec<String>,
-        rows: Vec<Vec<String>>,
-        total: usize,
     },
     StringList {
         items: Vec<String>,
@@ -95,7 +89,12 @@ fn analyze_array(doc: &JsonDocument, children: &[NodeId]) -> PreviewContent {
     if num_count >= threshold {
         build_sparkline(doc, children)
     } else if obj_count >= threshold {
-        build_table(doc, children)
+        // Show key summary of the first item — more useful in a small preview
+        // than a cramped table. The full Table view is available with key `2`.
+        analyze_object(doc, match &doc.node(children[0]).value {
+            crate::model::node::JsonValue::Object(e) => e,
+            _ => return PreviewContent::Scalar { value: format!("[{} items]", children.len()), type_name: "array" },
+        })
     } else if str_count >= threshold {
         build_string_list(doc, children)
     } else {
@@ -144,40 +143,6 @@ fn build_sparkline(doc: &JsonDocument, children: &[NodeId]) -> PreviewContent {
         max,
         avg,
         count: children.len(),
-    }
-}
-
-fn build_table(doc: &JsonDocument, children: &[NodeId]) -> PreviewContent {
-    // Collect headers from first object
-    let mut headers = Vec::new();
-    if let JsonValue::Object(entries) = &doc.node(children[0]).value {
-        for (key, _) in entries {
-            headers.push(key.to_string());
-        }
-    }
-
-    // Build rows (first 10)
-    let mut rows = Vec::new();
-    for &id in children.iter().take(10) {
-        if let JsonValue::Object(entries) = &doc.node(id).value {
-            let row: Vec<String> = headers
-                .iter()
-                .map(|h| {
-                    entries
-                        .iter()
-                        .find(|(k, _)| k.as_ref() == h.as_str())
-                        .map(|(_, vid)| value_preview(doc, *vid))
-                        .unwrap_or_else(|| "\u{2014}".into())
-                })
-                .collect();
-            rows.push(row);
-        }
-    }
-
-    PreviewContent::Table {
-        headers,
-        rows,
-        total: children.len(),
     }
 }
 
@@ -275,7 +240,6 @@ pub(crate) fn render(
     // Preview pane with titled border
     let title = match content {
         PreviewContent::Sparkline { count, .. } => format!(" Sparkline \u{2502} {count} values "),
-        PreviewContent::Table { total, .. } => format!(" Table \u{2502} {total} rows "),
         PreviewContent::StringList { total, .. } => format!(" Strings \u{2502} {total} items "),
         PreviewContent::KeySummary { entries } => format!(" Object \u{2502} {} keys ", entries.len()),
         PreviewContent::FormattedString { kind, .. } => match kind {
@@ -337,28 +301,6 @@ pub(crate) fn render(
             }
         }
 
-        PreviewContent::Table {
-            headers,
-            rows,
-            ..
-        } => {
-            let mut lines = Vec::new();
-            let header_str = format!(" {}", headers.join(" \u{2502} "));
-            lines.push(Line::from(Span::styled(
-                header_str,
-                theme.fg_bold_style.add_modifier(Modifier::UNDERLINED),
-            )));
-
-            for row in rows {
-                let row_str = format!(" {}", row.join(" \u{2502} "));
-                lines.push(Line::from(Span::styled(row_str, theme.fg_style)));
-            }
-
-            frame.render_widget(
-                ratatui::widgets::Paragraph::new(lines).style(theme.bg_style),
-                area,
-            );
-        }
 
         PreviewContent::StringList { items, .. } => {
             let mut lines = Vec::new();
