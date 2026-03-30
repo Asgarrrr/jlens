@@ -395,87 +395,65 @@ pub(crate) fn evaluate(
 // Rendering
 // ---------------------------------------------------------------------------
 
-/// Render the filter input bar (2 rows: input + separator). Returns rows consumed.
-pub(crate) fn render_filter_bar(
+/// Render the filter input in a single status-bar row (replaces the status bar when active).
+pub(crate) fn render_filter_input(
     frame: &mut ratatui::Frame,
     filter: &FilterState,
     area: Rect,
     theme: &Theme,
-) -> u16 {
-    if area.height < 2 {
-        return 0;
-    }
-
-    // Input line
-    let input_area = Rect::new(area.x, area.y, area.width, 1);
+) {
     let prompt = " \u{276f} ";
     let prompt_width = crate::util::display_width(prompt) as u16;
     let (before, after) = filter.query.split_at(filter.cursor);
-    let mut spans = vec![
+
+    // Right-aligned status
+    let right = if let Some(ref err) = filter.error {
+        format!("\u{26a0} {}", crate::util::truncate_chars(err, 30))
+    } else if filter.count > 0 {
+        format!("{} result{}", filter.count, if filter.count == 1 { "" } else { "s" })
+    } else if filter.query.trim().is_empty() {
+        String::new()
+    } else {
+        "no results".into()
+    };
+
+    let right_style = if filter.error.is_some() { theme.error_style } else { theme.fg_dim_style };
+    let right_width = crate::util::display_width(&right);
+    let left_avail = (area.width as usize).saturating_sub(right_width + prompt_width as usize + 2);
+    let padding = left_avail.saturating_sub(
+        crate::util::display_width(before) + crate::util::display_width(after),
+    );
+
+    let spans = vec![
         Span::styled(prompt, theme.toolbar_brand_style),
         Span::styled(before, theme.fg_style),
         Span::styled(after, theme.fg_style),
-        Span::raw(" "), // space before hints
+        Span::raw(" ".repeat(padding)),
+        Span::styled(right, right_style),
+        Span::raw(" "),
     ];
-
-    // Real terminal cursor (blinking) at the correct position
-    let cursor_x = input_area.x + prompt_width + crate::util::display_width(before) as u16;
-    frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, input_area.y));
-
-    if filter.show_suggestions {
-        spans.push(Span::styled("  Tab/\u{2191}\u{2193} nav  Enter accept", theme.fg_dim_style));
-    } else {
-        spans.push(Span::styled("  Enter apply  Tab suggest  Esc close", theme.fg_dim_style));
-    }
 
     frame.render_widget(
         ratatui::widgets::Paragraph::new(Line::from(spans)).style(theme.bg_style),
-        input_area,
+        area,
     );
 
-    // Separator
-    let sep_area = Rect::new(area.x, area.y + 1, area.width, 1);
-    let (label, style) = if let Some(ref err) = filter.error {
-        (format!(" \u{26a0} {err} "), theme.error_style)
-    } else if filter.count > 0 {
-        let s = if filter.count == 1 { "" } else { "s" };
-        (format!(" {} result{s} ", filter.count), theme.fg_dim_style)
-    } else if filter.query.trim().is_empty() {
-        (" Type a field name or expression ".into(), theme.fg_dim_style)
-    } else {
-        (" No results ".into(), theme.fg_dim_style)
-    };
-
-    let rule_len = (area.width as usize).saturating_sub(label.len() + 2);
-    frame.render_widget(
-        ratatui::widgets::Paragraph::new(Line::from(vec![
-            Span::styled("\u{2500}\u{2500}", theme.tree_guide_style),
-            Span::styled(label, style),
-            Span::styled("\u{2500}".repeat(rule_len), theme.tree_guide_style),
-        ]))
-        .style(theme.bg_style),
-        sep_area,
-    );
-
-    // Note: suggestions are rendered separately AFTER the tree view
-    // to ensure correct z-ordering (see render_filter_suggestions).
-
-    2
+    // Terminal cursor
+    let cursor_x = area.x + prompt_width + crate::util::display_width(before) as u16;
+    frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, area.y));
 }
 
-/// Render the suggestion popup. Must be called AFTER the main view renders
-/// to ensure the popup appears on top.
+/// Render the suggestion popup ABOVE the status bar.
 pub(crate) fn render_filter_suggestions(
     frame: &mut ratatui::Frame,
     filter: &FilterState,
-    filter_bar_area: Rect,
+    status_area: Rect,
     theme: &Theme,
 ) {
     if !filter.active {
         return;
     }
-    let input_area = Rect::new(filter_bar_area.x, filter_bar_area.y, filter_bar_area.width, 1);
-    render_suggestions(frame, filter, input_area, theme);
+    render_suggestions(frame, filter, status_area, theme);
 }
 
 fn render_suggestions(
@@ -492,9 +470,9 @@ fn render_suggestions(
     let popup_height = max_shown as u16 + 2;
     let popup_width = input_area.width.min(45);
 
-    // Below the input line (not above)
+    // Above the status bar
     let screen = frame.area();
-    let popup_y = (input_area.y + 1).min(screen.height.saturating_sub(popup_height));
+    let popup_y = input_area.y.saturating_sub(popup_height);
     let popup_x = (input_area.x + 3).min(screen.width.saturating_sub(popup_width));
     let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
 

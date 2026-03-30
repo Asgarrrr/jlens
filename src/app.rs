@@ -510,39 +510,22 @@ fn run_app(
                 let inner = block.inner(main_area);
                 frame.render_widget(block, main_area);
 
-                // If filter is active, render input bar at top, live tree below
-                let view_area = if app.filter.active {
-                    let used = filter::render_filter_bar(
-                        frame, &app.filter, inner, &app.theme,
-                    );
-                    let below = Rect::new(
-                        inner.x,
-                        inner.y + used,
-                        inner.width,
-                        inner.height.saturating_sub(used),
-                    );
-                    // Show live filtered tree, or the original view if no results yet
+                app.last_main_area = inner;
+                app.update_viewport_height(inner.height as usize);
+
+                // Render the active view (or filtered result)
+                if app.filter.active {
                     if let Some(ref res) = app.filter.result {
-                        res.view.render(frame, below, &app.theme);
+                        res.view.render(frame, inner, &app.theme);
                     } else {
-                        app.active_view().render(frame, below, &app.theme);
+                        app.active_view().render(frame, inner, &app.theme);
                     }
-                    below
+                } else if app.filter.has_result() {
+                    if let Some(ref res) = app.filter.result {
+                        res.view.render(frame, inner, &app.theme);
+                    }
                 } else {
-                    inner
-                };
-
-                app.last_main_area = view_area;
-                app.update_viewport_height(view_area.height as usize);
-
-                if !app.filter.active {
-                    if app.filter.has_result() {
-                        if let Some(ref res) = app.filter.result {
-                            res.view.render(frame, view_area, &app.theme);
-                        }
-                    } else {
-                        app.active_view().render(frame, view_area, &app.theme);
-                    }
+                    app.active_view().render(frame, inner, &app.theme);
                 }
 
                 // Bottom bar: search or export
@@ -616,17 +599,11 @@ fn run_app(
                     .as_ref()
                     .map(|(msg, _)| msg.as_str())
                     .or(filter_indicator.as_deref());
-                ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
-
-                // Overlays (rendered last for correct z-ordering)
                 if app.filter.active {
-                    let bar_area = Rect::new(
-                        inner.x,
-                        inner.y,
-                        inner.width,
-                        2,
-                    );
-                    filter::render_filter_suggestions(frame, &app.filter, bar_area, &app.theme);
+                    filter::render_filter_input(frame, &app.filter, status, &app.theme);
+                    filter::render_filter_suggestions(frame, &app.filter, status, &app.theme);
+                } else {
+                    ui::render_status_bar(frame, status, &status_info, metadata, flash, &app.theme);
                 }
 
                 if app.show_help {
