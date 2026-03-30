@@ -71,6 +71,10 @@ struct App {
     preview_pct: u16,
     preview_cache: Option<(NodeId, crate::preview::PreviewContent)>,
     finder: crate::finder::FinderState,
+    /// Cached serde_json::Value for filter live preview (avoids rebuild per keystroke).
+    filter_value_cache: Option<serde_json::Value>,
+    /// Cached field names for filter suggestions.
+    filter_fields_cache: Option<Vec<String>>,
 }
 
 impl App {
@@ -104,6 +108,8 @@ impl App {
             preview_pct: 50,
             preview_cache: None,
             finder: crate::finder::FinderState::new(),
+            filter_value_cache: None,
+            filter_fields_cache: None,
         }
     }
 
@@ -142,6 +148,8 @@ impl App {
         self.path_view = None;
         self.stats_view = None;
         self.preview_cache = None;
+        self.filter_value_cache = None;
+        self.filter_fields_cache = None;
         self.ensure_view(self.active_mode);
     }
 
@@ -674,11 +682,20 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
             | FilterAction::ReopenInput
             | FilterAction::DelegateToResult(_) => {}
         }
-        // Update suggestions (always, so Tab shows them instantly) + live preview
+        // Update suggestions + live preview (with caching to avoid per-keystroke rebuilds)
         if app.filter.active {
             let root = app.effective_root();
-            filter::update_suggestions(&mut app.filter, &app.document, root);
-            filter::update_live_preview(&mut app.filter, &app.document);
+            filter::update_suggestions(
+                &mut app.filter,
+                &app.document,
+                root,
+                &mut app.filter_fields_cache,
+            );
+            filter::update_live_preview(
+                &mut app.filter,
+                &app.document,
+                &mut app.filter_value_cache,
+            );
         }
         return;
     }

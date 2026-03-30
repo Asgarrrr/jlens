@@ -409,10 +409,12 @@ const BUILTINS: &[&str] = &[
     "ascii_downcase", "select", "map", "sort_by",
 ];
 
-/// Compute live preview of filter results (called on each keystroke, debounced in caller).
+/// Compute live preview of filter results.
+/// Caches the serde_json::Value reconstruction to avoid rebuilding on every keystroke.
 pub(crate) fn update_live_preview(
     filter: &mut FilterState,
     document: &JsonDocument,
+    cached_value: &mut Option<serde_json::Value>,
 ) {
     let query = filter.query.trim();
     if query.is_empty() {
@@ -422,6 +424,7 @@ pub(crate) fn update_live_preview(
         return;
     }
 
+    // Parse first — cheap. If it fails, show error without touching the cache.
     let expr = match crate::filter::parse::parse(query) {
         Ok(e) => e,
         Err(e) => {
@@ -432,8 +435,11 @@ pub(crate) fn update_live_preview(
         }
     };
 
-    let root_value = raw::rebuild_serde_value(document, document.root());
-    match crate::filter::eval::apply(&root_value, &expr) {
+    // Rebuild serde_json::Value only once (cached across keystrokes).
+    let root_value = cached_value
+        .get_or_insert_with(|| raw::rebuild_serde_value(document, document.root()));
+
+    match crate::filter::eval::apply(root_value, &expr) {
         Ok(results) => {
             filter.live_count = results.len();
             filter.live_error = None;
@@ -463,6 +469,7 @@ pub(crate) fn update_suggestions(
     filter: &mut FilterState,
     doc: &JsonDocument,
     root: crate::model::node::NodeId,
+    cached_fields: &mut Option<Vec<String>>,
 ) {
     let query = &filter.query;
     if query.is_empty() {
@@ -475,8 +482,9 @@ pub(crate) fn update_suggestions(
 
     filter.suggestions = match ctx {
         Context::AfterDot => {
-            // Suggest field names from document
-            let mut fields = collect_field_names(doc, root);
+            let all_fields = cached_fields
+                .get_or_insert_with(|| collect_field_names(doc, root));
+            let mut fields = all_fields.clone();
             if !prefix.is_empty() {
                 let lower = prefix.to_lowercase();
                 fields.retain(|f| f.to_lowercase().starts_with(&lower));
