@@ -367,8 +367,10 @@ pub(crate) fn render_filter_overlay(
     field_names: &[String],
 ) {
     let screen = frame.area();
-    let w = (screen.width * 80 / 100).max(50).min(screen.width);
-    let h = (screen.height * 70 / 100).max(12).min(screen.height);
+    // Size to content: input + separator + results (max 12) + footer = ~16 rows
+    let content_rows = if filter.query.trim().is_empty() { 12 } else { filter.live_results.len().clamp(1, 15) + 1 };
+    let h = (content_rows as u16 + 4).clamp(8, screen.height.saturating_sub(4));
+    let w = (screen.width * 70 / 100).clamp(50, screen.width.saturating_sub(4));
     let x = (screen.width - w) / 2;
     let y = (screen.height - h) / 2;
     let overlay = Rect::new(x, y, w, h);
@@ -377,8 +379,8 @@ pub(crate) fn render_filter_overlay(
 
     let block = ratatui::widgets::Block::bordered()
         .title(" Filter ")
-        .title_style(theme.help_title_style)
-        .border_style(theme.tree_guide_style)
+        .title_style(theme.toolbar_brand_style)
+        .border_style(theme.toolbar_active_style)
         .style(theme.bg_style);
     let inner = block.inner(overlay);
     frame.render_widget(block, overlay);
@@ -409,27 +411,31 @@ pub(crate) fn render_filter_overlay(
         input_area,
     );
 
-    // Separator
+    // Separator with label
     let sep_area = Rect::new(inner.x, inner.y + 1, inner.width, 1);
-    let result_label = if let Some(ref err) = filter.live_error {
-        format!(" \u{26a0} {err}")
+    let (sep_label, sep_style) = if let Some(ref err) = filter.live_error {
+        (format!(" \u{26a0} {err} "), theme.error_style)
     } else if filter.live_count > 0 {
-        format!(" {count} result{s}", count = filter.live_count, s = if filter.live_count == 1 { "" } else { "s" })
+        let s = if filter.live_count == 1 { "" } else { "s" };
+        (format!(" {} result{s} ", filter.live_count), theme.fg_dim_style)
     } else if filter.query.trim().is_empty() {
-        " Examples".into()
+        (" Examples ".into(), theme.fg_dim_style)
     } else {
-        " No results".into()
+        (" No results ".into(), theme.fg_dim_style)
     };
 
-    let sep_style = if filter.live_error.is_some() {
-        theme.error_style
-    } else {
-        theme.fg_dim_style
-    };
+    // Draw: ─── label ──────
+    let label_width = sep_label.len();
+    let remaining = (inner.width as usize).saturating_sub(label_width + 2);
+    let rule_right = "\u{2500}".repeat(remaining);
+    let sep_line = Line::from(vec![
+        Span::styled("\u{2500}\u{2500}", theme.tree_guide_style),
+        Span::styled(sep_label, sep_style),
+        Span::styled(rule_right, theme.tree_guide_style),
+    ]);
 
     frame.render_widget(
-        ratatui::widgets::Paragraph::new(Line::from(Span::styled(result_label, sep_style)))
-            .style(theme.bg_style),
+        ratatui::widgets::Paragraph::new(sep_line).style(theme.bg_style),
         sep_area,
     );
 
@@ -528,37 +534,34 @@ pub(crate) fn render_suggestions(
 // Suggestion engine
 // ---------------------------------------------------------------------------
 
-fn render_examples<'a>(fields: &[String], theme: &'a Theme, max_lines: usize) -> Vec<Line<'a>> {
-    let mut lines = Vec::new();
-    lines.push(Line::from(""));
-
-    // Pick a field name for examples (first non-trivial one, or fallback)
-    let sample_field = fields
+fn render_examples(fields: &[String], theme: &Theme, max_lines: usize) -> Vec<Line<'static>> {
+    let sample = fields
         .iter()
         .find(|f| f.as_str() != ".")
         .map(|s| s.as_str())
         .unwrap_or("name");
 
     let examples: Vec<(&str, String)> = vec![
-        ("count items", ". | length".into()),
-        ("list all values", format!(".[] | .{sample_field}")),
-        ("show structure", ".[0] | keys".into()),
-        ("filter", format!(".[] | select(.{sample_field} != null)")),
-        ("sort", format!("sort_by(.{sample_field})")),
-        ("extract field", format!("map(.{sample_field})")),
-        ("unique values", format!("map(.{sample_field}) | unique")),
-        ("first 5 items", ".[0:5]".into()),
-        ("reverse", ". | reverse".into()),
+        ("Count", ". | length".into()),
+        ("Values", format!(".[] | .{sample}")),
+        ("Keys", ".[0] | keys".into()),
+        ("Filter", format!(".[] | select(.{sample} != null)")),
+        ("Sort", format!("sort_by(.{sample})")),
+        ("Extract", format!("map(.{sample})")),
+        ("Unique", format!("map(.{sample}) | unique")),
+        ("Slice", ".[0:5]".into()),
     ];
 
-    for (desc, expr) in examples.iter().take(max_lines.saturating_sub(2)) {
-        lines.push(Line::from(vec![
-            Span::styled(format!("  {expr}"), theme.fg_style),
-            Span::styled(format!("  \u{2190} {desc}"), theme.fg_dim_style),
-        ]));
-    }
-
-    lines
+    examples
+        .into_iter()
+        .take(max_lines)
+        .map(|(desc, expr)| {
+            Line::from(vec![
+                Span::styled(format!("  {desc:<10}"), theme.fg_dim_style),
+                Span::styled(expr, theme.key),
+            ])
+        })
+        .collect()
 }
 
 const BUILTINS: &[&str] = &[
