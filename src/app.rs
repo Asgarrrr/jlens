@@ -118,17 +118,12 @@ impl App {
         let Some(node_id) = self.tree_view.selected_node_id() else {
             return;
         };
-        // Only zoom into containers
         if !self.document.node(node_id).value.is_container() {
             return;
         }
         self.zoom_stack.push(node_id);
         self.tree_view.set_root(node_id);
-        // Invalidate cached views so they rebuild from the new root
-        self.raw_view = None;
-        self.table_view = None;
-        self.path_view = None;
-        self.stats_view = None;
+        self.invalidate_views();
     }
 
     fn zoom_out(&mut self) {
@@ -137,10 +132,17 @@ impl App {
         }
         let root = self.effective_root();
         self.tree_view.set_root(root);
+        self.invalidate_views();
+    }
+
+    /// Invalidate cached views and rebuild the active one immediately.
+    fn invalidate_views(&mut self) {
         self.raw_view = None;
         self.table_view = None;
         self.path_view = None;
         self.stats_view = None;
+        self.preview_cache = None;
+        self.ensure_view(self.active_mode);
     }
 
     /// Initialize the App with a lazy document, setting stub IDs on the tree view.
@@ -515,8 +517,10 @@ fn run_app(
                     );
                 }
 
-                // Preview pane
-                if let Some(preview_area) = preview_area {
+                // Preview pane (only in tree view — other views have their own display)
+                if let Some(preview_area) = preview_area
+                    && app.active_mode == ViewMode::Tree
+                {
                     let selected_id = app.tree_view.selected_node_id();
                     let cache_valid = app
                         .preview_cache
