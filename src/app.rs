@@ -57,6 +57,7 @@ struct App {
     flash_message: Option<(String, u8)>,
     show_help: bool,
     should_quit: bool,
+    needs_redraw: bool,
     /// Last known main content area; updated each draw, used for mouse hit-testing.
     last_main_area: Rect,
     /// Last known status bar area; used for breadcrumb click navigation.
@@ -87,6 +88,7 @@ impl App {
             flash_message: None,
             show_help: false,
             should_quit: false,
+            needs_redraw: true,
             last_main_area: Rect::default(),
             last_status_area: Rect::default(),
             export: ExportState::new(),
@@ -124,7 +126,7 @@ impl App {
                 self.lazy_doc = Some(expanded);
             }
             Err(e) => {
-                self.flash_message = Some((format!("Expand failed: {}", e), 6));
+                self.flash_message = Some((format!("Expand failed: {}", e), 18));
                 self.lazy_doc = Some(lazy);
             }
         }
@@ -328,10 +330,12 @@ fn run_app(
     if let Some(lazy) = lazy {
         app.set_lazy_document(lazy);
     }
-    const TICK: Duration = Duration::from_millis(100);
+    const TICK: Duration = Duration::from_millis(33);
 
     loop {
-        terminal.draw(|frame| {
+        if app.needs_redraw {
+            app.needs_redraw = false;
+            terminal.draw(|frame| {
             let [toolbar, main_area_full, status] = ui::layout(frame.area());
 
             // Reserve 1 line at the bottom of the main area for search, export, or filter bar.
@@ -422,19 +426,29 @@ fn run_app(
                 ui::render_help_overlay(frame, frame.area(), &app.theme);
             }
         })?;
+        }
 
         if app.should_quit {
             break;
         }
 
         match crate::event::poll(TICK)? {
-            AppEvent::Key(key) => handle_key(&mut app, key),
-            AppEvent::Mouse(mouse) => handle_mouse(&mut app, mouse),
-            AppEvent::Resize => {}
+            AppEvent::Key(key) => {
+                handle_key(&mut app, key);
+                app.needs_redraw = true;
+            }
+            AppEvent::Mouse(mouse) => {
+                handle_mouse(&mut app, mouse);
+                app.needs_redraw = true;
+            }
+            AppEvent::Resize => {
+                app.needs_redraw = true;
+            }
             AppEvent::Tick => {
                 // Debounced search: run after the user stops typing
                 if app.search.should_search() {
                     app.run_search();
+                    app.needs_redraw = true;
                 }
 
                 // Decay flash message
@@ -444,6 +458,7 @@ fn run_app(
                     } else {
                         *ttl -= 1;
                     }
+                    app.needs_redraw = true;
                 }
             }
         }
@@ -511,8 +526,8 @@ fn handle_key(app: &mut App, key: crossterm::event::KeyEvent) {
                 );
                 let result = export::perform_export(&app.export.filename, &content);
                 match result {
-                    Ok(msg) => app.flash_message = Some((msg, 20)),
-                    Err(msg) => app.flash_message = Some((msg, 20)),
+                    Ok(msg) => app.flash_message = Some((msg, 60)),
+                    Err(msg) => app.flash_message = Some((msg, 60)),
                 }
                 app.export.active = false;
             }
@@ -678,7 +693,7 @@ fn handle_action(app: &mut App, action: ViewAction) {
                     } else {
                         text
                     };
-                    app.flash_message = Some((format!("Copied: {}", preview), 15));
+                    app.flash_message = Some((format!("Copied: {}", preview), 45));
                 }
             }
         }

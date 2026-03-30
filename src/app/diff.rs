@@ -51,14 +51,17 @@ fn run_diff_app(
     title: &str,
     theme: Theme,
 ) -> Result<()> {
-    const TICK: Duration = Duration::from_millis(100);
+    const TICK: Duration = Duration::from_millis(33);
     let keymap = KeyMap::default_map();
+    let mut needs_redraw = true;
     let mut show_help = false;
     let mut should_quit = false;
     let mut last_main_area = Rect::default();
 
     loop {
-        terminal.draw(|frame| {
+        if needs_redraw {
+            needs_redraw = false;
+            terminal.draw(|frame| {
             let [toolbar, main_area, status_area] = ui::layout(frame.area());
             last_main_area = main_area;
 
@@ -82,6 +85,7 @@ fn run_diff_app(
                 ui::render_help_overlay(frame, frame.area(), &theme);
             }
         })?;
+        }
 
         if should_quit {
             break;
@@ -89,6 +93,7 @@ fn run_diff_app(
 
         match crate::event::poll(TICK)? {
             AppEvent::Key(key) => {
+                needs_redraw = true;
                 if show_help {
                     show_help = false;
                 } else if let Some(action) = keymap.resolve(&key) {
@@ -101,6 +106,7 @@ fn run_diff_app(
                 }
             }
             AppEvent::Mouse(mouse) => {
+                needs_redraw = true;
                 use crossterm::event::MouseEventKind;
                 use crate::keymap::Action;
                 match mouse.kind {
@@ -130,7 +136,7 @@ fn run_diff_app(
                     _ => {}
                 }
             }
-            AppEvent::Resize => {}
+            AppEvent::Resize => { needs_redraw = true; }
             AppEvent::Tick => {}
         }
     }
