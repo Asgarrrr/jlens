@@ -104,14 +104,13 @@ impl LazyDocument {
         !self.pending.is_empty()
     }
 
-    /// Expand a stub node, parsing its byte range and producing a new
-    /// `LazyDocument` with the subtree filled in.
+    /// Expand a stub node in place, parsing its byte range and appending
+    /// the new subtree to the existing arena.
     ///
-    /// The new document reuses the existing nodes (cloned) with the stub's
-    /// children appended. Any containers found inside the expanded subtree
-    /// that exceed `MAX_SHALLOW_DEPTH` relative to the stub are themselves
-    /// recorded as new stubs.
-    pub fn expand_node(&self, stub_id: NodeId) -> Result<LazyDocument, ParseError> {
+    /// NodeIds of existing nodes remain valid (append-only).
+    /// Any containers found inside the expanded subtree that exceed
+    /// `MAX_SHALLOW_DEPTH` relative to the stub are recorded as new stubs.
+    pub fn expand_node(&mut self, stub_id: NodeId) -> Result<(), ParseError> {
         let range = match self.pending.get(&stub_id) {
             Some(r) => *r,
             None => return Err(ParseError::Syntax {
@@ -121,15 +120,10 @@ impl LazyDocument {
             }),
         };
 
-        let stub_node = &self.nodes[stub_id.index()];
-        let stub_depth = stub_node.depth;
-
-        // Clone the existing arena and pending set.
-        let mut nodes = self.nodes.clone();
-        let mut pending = self.pending.clone();
+        let stub_depth = self.nodes[stub_id.index()].depth;
 
         // Remove this stub from pending — it's about to be expanded.
-        pending.remove(&stub_id);
+        self.pending.remove(&stub_id);
 
         let bytes = &self.mmap[..];
         let mut sub_builder = ShallowBuilder {
@@ -137,25 +131,18 @@ impl LazyDocument {
             nodes: Vec::new(),
             max_depth: 0,
             pending: HashMap::new(),
-            // Allow one more level of nesting from this stub before stubbing again.
             stub_threshold: stub_depth + MAX_SHALLOW_DEPTH + 1,
         };
 
-        // Parse the stub's byte range. The value at range.start is a container
-        // (object or array) — parse it at depth stub_depth.
         let (_, _end) = sub_builder.parse_value(range.start, None, stub_depth)?;
 
-        // The sub-builder produced a tree rooted at index 0. The root of that
-        // tree corresponds to our stub node — we only need its children, not
-        // the duplicate container node.
         if sub_builder.nodes.is_empty() {
-            return Ok(self.clone_with(nodes, pending));
+            return Ok(());
         }
 
-        // Extract the sub-root's value before consuming the vec.
         let sub_root_value = sub_builder.nodes[0].value.clone();
         let sub_pending = sub_builder.pending;
-        let base_offset = nodes.len() as u32;
+        let base_offset = self.nodes.len() as u32;
 
         // Remap NodeIds in sub_builder: shift by base_offset.
         // The sub_root's children become the stub's children.
@@ -182,16 +169,15 @@ impl LazyDocument {
                 }
                 other => other,
             };
-            nodes.push(JsonNode {
+            self.nodes.push(JsonNode {
                 parent: remapped_parent,
                 value: remapped_value,
                 depth: sub_node.depth,
             });
 
-            // Remap pending entries from the sub-builder.
             let sub_id = NodeId::from_raw(i as u32);
             if let Some(byte_range) = sub_pending.get(&sub_id) {
-                pending.insert(remap(sub_id), *byte_range);
+                self.pending.insert(remap(sub_id), *byte_range);
             }
         }
 
@@ -205,47 +191,34 @@ impl LazyDocument {
             }
             _ => sub_root_value,
         };
-        nodes[stub_id.index()].value = new_value;
+        self.nodes[stub_id.index()].value = new_value;
 
         // Fix parents: children of the stub should point to stub_id.
-        match &nodes[stub_id.index()].value {
+        match &self.nodes[stub_id.index()].value {
             JsonValue::Array(children) => {
                 let child_ids: Vec<NodeId> = children.clone();
                 for child_id in child_ids {
-                    nodes[child_id.index()].parent = Some(stub_id);
+                    self.nodes[child_id.index()].parent = Some(stub_id);
                 }
             }
             JsonValue::Object(entries) => {
                 let child_ids: Vec<NodeId> = entries.iter().map(|(_, c)| *c).collect();
                 for child_id in child_ids {
-                    nodes[child_id.index()].parent = Some(stub_id);
+                    self.nodes[child_id.index()].parent = Some(stub_id);
                 }
             }
             _ => {}
         }
 
-        Ok(self.clone_with(nodes, pending))
-    }
+        // Update metadata.
+        self.metadata.total_nodes = self.nodes.len();
+        self.metadata.max_depth = self.nodes.iter().map(|n| n.depth).max().unwrap_or(0);
 
-    fn clone_with(&self, nodes: Vec<JsonNode>, pending: HashMap<NodeId, ByteRange>) -> LazyDocument {
-        let total_nodes = nodes.len();
-        let max_depth = nodes.iter().map(|n| n.depth).max().unwrap_or(0);
-        LazyDocument {
-            nodes,
-            root: self.root,
-            metadata: DocumentMetadata {
-                source_path: self.metadata.source_path.clone(),
-                source_size: self.metadata.source_size,
-                parse_time: self.metadata.parse_time,
-                total_nodes,
-                max_depth,
-            },
-            mmap: Arc::clone(&self.mmap),
-            pending,
-        }
+        Ok(())
     }
 
     /// Build a `JsonDocument` snapshot from the current state.
+    /// Clones the arena — use `into_document` when the LazyDocument is no longer needed.
     pub fn to_document(&self) -> JsonDocument {
         JsonDocument::from_raw_parts(
             self.nodes.clone(),
@@ -542,19 +515,19 @@ mod tests {
         // "nested" at depth 2 exceeds MAX_SHALLOW_DEPTH(1) and is stubbed.
         let json = br#"{"items": {"nested": {"x": 1, "y": 2}}}"#;
         let mmap = make_mmap(json);
-        let lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+        let mut lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
 
         // Find the stub.
         assert!(lazy.has_pending_stubs());
         let stub_id = *lazy.pending.keys().next().unwrap();
         assert!(lazy.is_stub(stub_id));
 
-        // Expand it.
-        let expanded = lazy.expand_node(stub_id).unwrap();
-        assert!(!expanded.is_stub(stub_id));
-        assert!(!expanded.has_pending_stubs());
+        // Expand it in place.
+        lazy.expand_node(stub_id).unwrap();
+        assert!(!lazy.is_stub(stub_id));
+        assert!(!lazy.has_pending_stubs());
 
-        let doc = expanded.to_document();
+        let doc = lazy.to_document();
         let stub_node = doc.node(stub_id);
         if let JsonValue::Object(entries) = &stub_node.value {
             assert_eq!(entries.len(), 2);
@@ -572,24 +545,24 @@ mod tests {
         // and becomes a new stub.
         let json = br#"{"a": {"b": {"c": {"d": {"e": [1, 2]}}}}}"#;
         let mmap = make_mmap(json);
-        let lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+        let mut lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
 
         // Initial: "b" at depth 2 is stubbed.
         assert!(lazy.has_pending_stubs());
 
-        // Find and expand "b".
+        // Find and expand "b" in place.
         let stub_id = *lazy.pending.keys().next().unwrap();
-        let expanded = lazy.expand_node(stub_id).unwrap();
+        lazy.expand_node(stub_id).unwrap();
 
         // After expanding "b": "e" at depth 5 is now a new stub.
-        assert!(expanded.has_pending_stubs());
+        assert!(lazy.has_pending_stubs());
 
-        // Expand "e".
-        let stub2_id = *expanded.pending.keys().next().unwrap();
-        let fully = expanded.expand_node(stub2_id).unwrap();
-        assert!(!fully.has_pending_stubs());
+        // Expand "e" in place.
+        let stub2_id = *lazy.pending.keys().next().unwrap();
+        lazy.expand_node(stub2_id).unwrap();
+        assert!(!lazy.has_pending_stubs());
 
-        let doc = fully.to_document();
+        let doc = lazy.to_document();
         // root, a, b, c, d, e, 1, 2 = 8 nodes
         assert!(doc.metadata().total_nodes >= 8);
     }
@@ -598,7 +571,7 @@ mod tests {
     fn expand_array_stub() {
         let json = br#"{"data": [10, 20, 30]}"#;
         let mmap = make_mmap(json);
-        let lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
+        let mut lazy = LazyDocument::from_mmap(mmap, None, json.len() as u64, Instant::now()).unwrap();
 
         if !lazy.has_pending_stubs() {
             // "data" array is at depth 1 — within threshold, so fully parsed.
@@ -615,8 +588,8 @@ mod tests {
         }
 
         let stub_id = *lazy.pending.keys().next().unwrap();
-        let expanded = lazy.expand_node(stub_id).unwrap();
-        let doc = expanded.to_document();
+        lazy.expand_node(stub_id).unwrap();
+        let doc = lazy.to_document();
         let stub_node = doc.node(stub_id);
         if let JsonValue::Array(items) = &stub_node.value {
             assert_eq!(items.len(), 3);

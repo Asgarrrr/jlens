@@ -104,32 +104,29 @@ impl App {
         self.lazy_doc = Some(lazy);
     }
 
-    /// Expand a lazy stub node, rebuilding the document and updating views.
+    /// Expand a lazy stub node, updating the document and views.
     fn expand_lazy_stub(&mut self, stub_id: NodeId) {
-        let Some(lazy) = self.lazy_doc.take() else { return };
+        let Some(ref mut lazy) = self.lazy_doc else { return };
 
-        match lazy.expand_node(stub_id) {
-            Ok(expanded) => {
-                let doc = Arc::new(expanded.to_document());
-                self.document = Arc::clone(&doc);
-                self.tree_view.update_document(doc, Some(stub_id));
-
-                // Invalidate lazily-constructed views so they rebuild with new data.
-                self.raw_view = None;
-                self.table_view = None;
-                self.path_view = None;
-                self.stats_view = None;
-
-                // Update stub IDs and store the new lazy doc.
-                let stubs: HashSet<NodeId> = expanded.stub_ids().collect();
-                self.tree_view.set_stub_ids(stubs);
-                self.lazy_doc = Some(expanded);
-            }
-            Err(e) => {
-                self.flash_message = Some((format!("Expand failed: {}", e), 18));
-                self.lazy_doc = Some(lazy);
-            }
+        if let Err(e) = lazy.expand_node(stub_id) {
+            self.flash_message = Some((format!("Expand failed: {}", e), 18));
+            return;
         }
+
+        // Rebuild document snapshot from the mutated arena.
+        let doc = Arc::new(lazy.to_document());
+        self.document = Arc::clone(&doc);
+        self.tree_view.update_document(doc, Some(stub_id));
+
+        // Invalidate lazily-constructed views so they rebuild with new data.
+        self.raw_view = None;
+        self.table_view = None;
+        self.path_view = None;
+        self.stats_view = None;
+
+        // Update stub IDs.
+        let stubs: HashSet<NodeId> = lazy.stub_ids().collect();
+        self.tree_view.set_stub_ids(stubs);
     }
 
     /// Ensure the view for `mode` exists, constructing it lazily if needed.
