@@ -895,8 +895,24 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
     }
 
     match mouse.kind {
-        MouseEventKind::ScrollUp => scroll_view(app, Action::MoveUp),
-        MouseEventKind::ScrollDown => scroll_view(app, Action::MoveDown),
+        MouseEventKind::ScrollUp => {
+            if app.active_mode == ViewMode::Graph {
+                if let Some(ref mut gv) = app.graph_view {
+                    gv.zoom_in();
+                }
+            } else {
+                scroll_view(app, Action::MoveUp);
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            if app.active_mode == ViewMode::Graph {
+                if let Some(ref mut gv) = app.graph_view {
+                    gv.zoom_out();
+                }
+            } else {
+                scroll_view(app, Action::MoveDown);
+            }
+        }
         MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
             // Breadcrumb click: clicking a path segment in the status bar navigates there.
             if !app.filter.has_result()
@@ -934,6 +950,19 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                     app.click_row(clicked_row);
                 }
             }
+        }
+        // Mouse drag for graph view panning
+        MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
+            if app.active_mode == ViewMode::Graph
+                && let Some(ref mut gv) = app.graph_view {
+                    gv.handle_mouse_drag(mouse.column, mouse.row);
+                }
+        }
+        MouseEventKind::Up(_) => {
+            if app.active_mode == ViewMode::Graph
+                && let Some(ref mut gv) = app.graph_view {
+                    gv.handle_mouse_release();
+                }
         }
         _ => {}
     }

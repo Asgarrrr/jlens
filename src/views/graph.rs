@@ -11,137 +11,174 @@ use crate::theme::Theme;
 use crate::views::{StatusInfo, View, ViewAction};
 
 // ---------------------------------------------------------------------------
-// Layout — compute (x, y) position for each node
+// Graph node layout
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-struct GraphNode {
+struct GNode {
     x: f64,
     y: f64,
     label: String,
     color: Color,
     width: f64,
-    children: Vec<usize>, // indices into the nodes vec
+    children: Vec<usize>,
 }
 
-struct GraphLayout {
-    nodes: Vec<GraphNode>,
-}
+/// Compute a top-down tree layout from the JSON document.
+fn build_layout(doc: &JsonDocument, root: NodeId, max_depth: u16) -> Vec<GNode> {
+    let mut nodes = Vec::new();
+    let mut queue: Vec<(NodeId, u16, Option<usize>)> = vec![(root, 0, None)];
 
-impl GraphLayout {
-    fn build(doc: &JsonDocument, root: NodeId, max_depth: u16) -> Self {
-        let mut nodes = Vec::new();
-        let mut stack: Vec<(NodeId, u16, Option<usize>)> = vec![(root, 0, None)];
-        let mut parent_children: std::collections::HashMap<usize, Vec<usize>> =
-            std::collections::HashMap::new();
+    // BFS to build flat list
+    while let Some((id, depth, parent_idx)) = queue.pop() {
+        if depth > max_depth {
+            continue;
+        }
 
-        while let Some((id, depth, parent_idx)) = stack.pop() {
-            if depth > max_depth {
-                continue;
-            }
+        let node = doc.node(id);
+        let (label, color) = make_label(node);
+        let max_kids = if depth < 2 { 8 } else { 4 };
 
-            let node = doc.node(id);
-            let (label, color) = node_label_color(node, id, depth);
+        let idx = nodes.len();
+        nodes.push(GNode {
+            x: 0.0,
+            y: -(depth as f64) * 6.0, // vertical spacing between levels
+            label,
+            color,
+            width: 0.0,
+            children: Vec::new(),
+        });
 
-            let idx = nodes.len();
-            nodes.push(GraphNode {
-                x: 0.0,
-                y: -(depth as f64) * 4.0,
-                label,
-                color,
-                width: 0.0,
-                children: Vec::new(),
-            });
+        if let Some(pi) = parent_idx {
+            nodes[pi].children.push(idx);
+        }
 
-            if let Some(pi) = parent_idx {
-                parent_children.entry(pi).or_default().push(idx);
-            }
-
-            // Push children (limited to first N per container)
-            let max_children = match depth {
-                0 => 20,
-                1 => 10,
-                2 => 5,
-                _ => 3,
-            };
-
-            match &node.value {
-                JsonValue::Object(entries) => {
-                    for (_, child_id) in entries.iter().take(max_children).rev() {
-                        stack.push((*child_id, depth + 1, Some(idx)));
+        match &node.value {
+            JsonValue::Object(entries) => {
+                let count = entries.len();
+                for (key, child_id) in entries.iter().take(max_kids).rev() {
+                    let child_node = doc.node(*child_id);
+                    let child_label = format!("{}: {}", key, short_value(child_node));
+                    let child_color = value_color(child_node);
+                    let child_idx = nodes.len();
+                    nodes.push(GNode {
+                        x: 0.0,
+                        y: -((depth + 1) as f64) * 6.0,
+                        label: child_label,
+                        color: child_color,
+                        width: 0.0,
+                        children: Vec::new(),
+                    });
+                    nodes[idx].children.push(child_idx);
+                    // Don't recurse into leaves — only containers get children
+                    if matches!(child_node.value, JsonValue::Object(_) | JsonValue::Array(_))
+                        && depth + 1 < max_depth
+                    {
+                        queue.push((*child_id, depth + 2, Some(child_idx)));
                     }
                 }
-                JsonValue::Array(children) => {
-                    for &child_id in children.iter().take(max_children).rev() {
-                        stack.push((child_id, depth + 1, Some(idx)));
-                    }
+                if count > max_kids {
+                    let more_idx = nodes.len();
+                    nodes.push(GNode {
+                        x: 0.0,
+                        y: -((depth + 1) as f64) * 6.0,
+                        label: format!("+{} more", count - max_kids),
+                        color: Color::Rgb(108, 112, 134),
+                        width: 0.0,
+                        children: Vec::new(),
+                    });
+                    nodes[idx].children.push(more_idx);
                 }
-                _ => {}
             }
+            JsonValue::Array(children) => {
+                let count = children.len();
+                for &child_id in children.iter().take(max_kids).rev() {
+                    queue.push((child_id, depth + 1, Some(idx)));
+                }
+                if count > max_kids {
+                    let more_idx = nodes.len();
+                    nodes.push(GNode {
+                        x: 0.0,
+                        y: -((depth + 1) as f64) * 6.0,
+                        label: format!("+{} more", count - max_kids),
+                        color: Color::Rgb(108, 112, 134),
+                        width: 0.0,
+                        children: Vec::new(),
+                    });
+                    nodes[idx].children.push(more_idx);
+                }
+            }
+            _ => {}
         }
-
-        // Wire children
-        for (parent_idx, children) in &parent_children {
-            nodes[*parent_idx].children = children.clone();
-        }
-
-        // Compute x positions (simple: spread children evenly)
-        let mut layout = Self { nodes };
-        if !layout.nodes.is_empty() {
-            layout.compute_x(0, 0.0);
-        }
-        layout
     }
 
-    fn compute_x(&mut self, idx: usize, min_x: f64) -> f64 {
-        let children = self.nodes[idx].children.clone();
-        if children.is_empty() {
-            let w = self.nodes[idx].label.len().max(4) as f64 + 2.0;
-            self.nodes[idx].x = min_x + w / 2.0;
-            self.nodes[idx].width = w;
-            return w;
-        }
-
-        let mut total_width = 0.0;
-        let gap = 2.0;
-        for (i, &child_idx) in children.iter().enumerate() {
-            let child_w = self.compute_x(child_idx, min_x + total_width);
-            total_width += child_w;
-            if i < children.len() - 1 {
-                total_width += gap;
-            }
-        }
-
-        let w = total_width.max(self.nodes[idx].label.len() as f64 + 2.0);
-        self.nodes[idx].x = min_x + w / 2.0;
-        self.nodes[idx].width = w;
-        w
+    // Compute x positions: each leaf gets a slot, parents center over children
+    if !nodes.is_empty() {
+        assign_x(&mut nodes, 0, 0.0);
     }
+    nodes
 }
 
-fn node_label_color(
-    node: &crate::model::node::JsonNode,
-    _id: NodeId,
-    _depth: u16,
-) -> (String, Color) {
+/// Assign x positions bottom-up. Returns the width consumed.
+fn assign_x(nodes: &mut Vec<GNode>, idx: usize, min_x: f64) -> f64 {
+    let children = nodes[idx].children.clone();
+    let w = (nodes[idx].label.len() as f64).max(6.0) + 2.0;
+
+    if children.is_empty() {
+        nodes[idx].x = min_x + w / 2.0;
+        nodes[idx].width = w;
+        return w;
+    }
+
+    let gap = 3.0;
+    let mut total = 0.0;
+    for (i, &child) in children.iter().enumerate() {
+        let child_w = assign_x(nodes, child, min_x + total);
+        total += child_w;
+        if i < children.len() - 1 {
+            total += gap;
+        }
+    }
+
+    let total = total.max(w);
+    nodes[idx].x = min_x + total / 2.0;
+    nodes[idx].width = total;
+    total
+}
+
+fn make_label(node: &crate::model::node::JsonNode) -> (String, Color) {
     match &node.value {
-        JsonValue::Null => ("null".into(), Color::Rgb(108, 112, 134)),
-        JsonValue::Bool(b) => (b.to_string(), Color::Rgb(203, 166, 247)),
-        JsonValue::Number(n) => (n.to_string(), Color::Rgb(250, 179, 135)),
+        JsonValue::Object(e) => (format!("{{{}}} ", e.len()), Color::Rgb(137, 180, 250)),
+        JsonValue::Array(c) => (format!("[{}]", c.len()), Color::Rgb(137, 180, 250)),
+        _ => (short_value(node), value_color(node)),
+    }
+}
+
+fn short_value(node: &crate::model::node::JsonNode) -> String {
+    match &node.value {
+        JsonValue::Null => "null".into(),
+        JsonValue::Bool(b) => b.to_string(),
+        JsonValue::Number(n) => n.to_string(),
         JsonValue::String(s) => {
-            let display = if s.len() > 12 {
-                format!("\"{}..\"", &s[..s.char_indices().nth(10).map(|(i, _)| i).unwrap_or(s.len())])
+            if s.len() > 15 {
+                let end = s.char_indices().nth(13).map(|(i, _)| i).unwrap_or(s.len());
+                format!("\"{}..\"", &s[..end])
             } else {
                 format!("\"{s}\"")
-            };
-            (display, Color::Rgb(166, 227, 161))
+            }
         }
-        JsonValue::Object(entries) => {
-            (format!("{{{}}}", entries.len()), Color::Rgb(137, 180, 250))
-        }
-        JsonValue::Array(children) => {
-            (format!("[{}]", children.len()), Color::Rgb(137, 180, 250))
-        }
+        JsonValue::Object(e) => format!("{{{}}}", e.len()),
+        JsonValue::Array(c) => format!("[{}]", c.len()),
+    }
+}
+
+fn value_color(node: &crate::model::node::JsonNode) -> Color {
+    match &node.value {
+        JsonValue::Null => Color::Rgb(108, 112, 134),
+        JsonValue::Bool(_) => Color::Rgb(203, 166, 247),
+        JsonValue::Number(_) => Color::Rgb(250, 179, 135),
+        JsonValue::String(_) => Color::Rgb(166, 227, 161),
+        JsonValue::Object(_) | JsonValue::Array(_) => Color::Rgb(137, 180, 250),
     }
 }
 
@@ -150,23 +187,27 @@ fn node_label_color(
 // ---------------------------------------------------------------------------
 
 pub struct GraphView {
-    layout: GraphLayout,
-    // Viewport (pan + zoom)
+    nodes: Vec<GNode>,
     center_x: f64,
     center_y: f64,
     zoom: f64,
     selected: usize,
+    /// For mouse drag: last mouse position
+    drag_from: Option<(u16, u16)>,
 }
 
 impl GraphView {
     pub fn new(document: Arc<JsonDocument>, root: NodeId) -> Self {
-        let layout = GraphLayout::build(&document, root, 4);
+        let nodes = build_layout(&document, root, 3);
+        let cx = nodes.first().map(|n| n.x).unwrap_or(0.0);
+        let cy = nodes.first().map(|n| n.y).unwrap_or(0.0);
         Self {
-            layout,
-            center_x: 0.0,
-            center_y: 0.0,
+            nodes,
+            center_x: cx,
+            center_y: cy,
             zoom: 1.0,
             selected: 0,
+            drag_from: None,
         }
     }
 
@@ -175,16 +216,16 @@ impl GraphView {
         self.center_y += dy / self.zoom;
     }
 
-    fn zoom_in(&mut self) {
+    pub fn zoom_in(&mut self) {
         self.zoom = (self.zoom * 1.3).min(5.0);
     }
 
-    fn zoom_out(&mut self) {
+    pub fn zoom_out(&mut self) {
         self.zoom = (self.zoom / 1.3).max(0.2);
     }
 
     fn select_next(&mut self) {
-        if self.selected + 1 < self.layout.nodes.len() {
+        if self.selected + 1 < self.nodes.len() {
             self.selected += 1;
             self.center_on_selected();
         }
@@ -198,50 +239,65 @@ impl GraphView {
     }
 
     fn center_on_selected(&mut self) {
-        if let Some(node) = self.layout.nodes.get(self.selected) {
+        if let Some(node) = self.nodes.get(self.selected) {
             self.center_x = node.x;
             self.center_y = node.y;
         }
+    }
+
+    /// Handle mouse drag for panning.
+    pub fn handle_mouse_drag(&mut self, x: u16, y: u16) {
+        if let Some((prev_x, prev_y)) = self.drag_from {
+            let dx = -(x as f64 - prev_x as f64);
+            let dy = (y as f64 - prev_y as f64) * 1.0;
+            self.pan(dx, dy);
+        }
+        self.drag_from = Some((x, y));
+    }
+
+    pub fn handle_mouse_release(&mut self) {
+        self.drag_from = None;
     }
 }
 
 impl View for GraphView {
     fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        let half_w = (area.width as f64) / self.zoom / 2.0;
-        let half_h = (area.height as f64 * 2.0) / self.zoom / 2.0; // braille = 2x height
+        let half_w = (area.width as f64) / self.zoom;
+        let half_h = (area.height as f64 * 2.0) / self.zoom;
 
-        let x_min = self.center_x - half_w;
-        let x_max = self.center_x + half_w;
-        let y_min = self.center_y - half_h;
-        let y_max = self.center_y + half_h;
+        let x_min = self.center_x - half_w / 2.0;
+        let x_max = self.center_x + half_w / 2.0;
+        let y_min = self.center_y - half_h / 2.0;
+        let y_max = self.center_y + half_h / 2.0;
 
         let canvas = Canvas::default()
             .x_bounds([x_min, x_max])
             .y_bounds([y_min, y_max])
-            .marker(ratatui::symbols::Marker::Braille)
+            .marker(ratatui::symbols::Marker::HalfBlock)
             .background_color(theme.bg)
             .paint(|ctx| {
-                // Draw edges
-                for node in &self.layout.nodes {
+                // Draw edges first (behind nodes)
+                for node in &self.nodes {
                     for &child_idx in &node.children {
-                        let child = &self.layout.nodes[child_idx];
+                        let child = &self.nodes[child_idx];
                         ctx.draw(&CanvasLine {
                             x1: node.x,
-                            y1: node.y - 0.5,
+                            y1: node.y - 1.0,
                             x2: child.x,
-                            y2: child.y + 1.5,
+                            y2: child.y + 2.0,
                             color: Color::Rgb(88, 91, 112),
                         });
                     }
                 }
 
-                // Draw nodes
-                for (i, node) in self.layout.nodes.iter().enumerate() {
-                    let is_selected = i == self.selected;
-                    let half_w = node.label.len() as f64 / 2.0 + 0.5;
+                ctx.layer();
 
-                    // Node box
-                    let border_color = if is_selected {
+                // Draw nodes
+                for (i, node) in self.nodes.iter().enumerate() {
+                    let is_sel = i == self.selected;
+                    let half_w = (node.label.len() as f64 / 2.0).max(3.0);
+
+                    let border = if is_sel {
                         Color::Rgb(249, 226, 175)
                     } else {
                         node.color
@@ -249,23 +305,20 @@ impl View for GraphView {
 
                     ctx.draw(&Rectangle {
                         x: node.x - half_w,
-                        y: node.y - 0.5,
+                        y: node.y - 1.0,
                         width: half_w * 2.0,
-                        height: 2.0,
-                        color: border_color,
+                        height: 3.0,
+                        color: border,
                     });
 
-                    // Label — clone the label so it has 'static lifetime
-                    let label: String = node.label.clone();
-                    let node_color = node.color;
-                    let label_x = node.x - half_w + 0.5;
-                    let label_y = node.y + 0.5;
+                    let label = node.label.clone();
+                    let color = node.color;
                     ctx.print(
-                        label_x,
-                        label_y,
+                        node.x - half_w + 0.5,
+                        node.y,
                         ratatui::text::Span::styled(
                             label,
-                            ratatui::style::Style::new().fg(node_color),
+                            ratatui::style::Style::new().fg(color),
                         ),
                     );
                 }
@@ -276,35 +329,32 @@ impl View for GraphView {
 
     fn handle_action(&mut self, action: Action) -> ViewAction {
         match action {
-            // Pan
             Action::MoveUp => self.pan(0.0, 3.0),
             Action::MoveDown => self.pan(0.0, -3.0),
             Action::PageUp => self.pan(0.0, 10.0),
             Action::PageDown => self.pan(0.0, -10.0),
-            Action::ExpandNode => self.pan(5.0, 0.0),   // l / Right
-            Action::CollapseNode => self.pan(-5.0, 0.0), // h / Left
-            // Zoom
-            Action::PreviewGrow => self.zoom_in(),       // +
-            Action::PreviewShrink => self.zoom_out(),    // -
+            Action::ExpandNode | Action::ScrollRight => self.pan(5.0, 0.0),
+            Action::CollapseNode | Action::ScrollLeft => self.pan(-5.0, 0.0),
+            Action::PreviewGrow => self.zoom_in(),
+            Action::PreviewShrink => self.zoom_out(),
             Action::Home => { self.zoom = 1.0; self.center_on_selected(); }
-            // Select
-            Action::NextSearchHit => self.select_next(), // n
-            Action::PrevSearchHit => self.select_prev(), // N
-            Action::ToggleExpand => self.center_on_selected(), // Enter
+            Action::NextSearchHit => self.select_next(),
+            Action::PrevSearchHit => self.select_prev(),
+            Action::ToggleExpand => self.center_on_selected(),
             _ => {}
         }
         ViewAction::None
     }
 
     fn status_info(&self) -> StatusInfo {
-        let label = self
-            .layout
-            .nodes
-            .get(self.selected)
-            .map(|n| n.label.as_str())
-            .unwrap_or("?");
+        let label = self.nodes.get(self.selected).map(|n| n.label.as_str()).unwrap_or("?");
         StatusInfo {
-            cursor_path: format!("graph ({} nodes) zoom:{:.0}% | {}", self.layout.nodes.len(), self.zoom * 100.0, label),
+            cursor_path: format!(
+                "graph | {} nodes | zoom {:.0}% | {}",
+                self.nodes.len(),
+                self.zoom * 100.0,
+                label,
+            ),
         }
     }
 
